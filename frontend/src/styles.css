@@ -1,0 +1,151 @@
+:root {
+  --bg: #f3f6f9;
+  --panel: #ffffff;
+  --text: #102a43;
+  --muted: #486581;
+  --border: #d9e2ec;
+  --critical: #b42318;
+  --high: #dc6803;
+  --medium: #b54708;
+  --low: #027a48;
+  --accent: #005f73;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at top right, #d9f3ff, transparent 35%), var(--bg);
+}
+
+.app-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+header p {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.upload-panel label {
+  display: block;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.upload-panel select,
+.upload-panel input,
+.upload-panel button {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.upload-panel button {
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.upload-panel button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.severity-badge {
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.severity-critical {
+  background: var(--critical);
+}
+
+.severity-high {
+  background: var(--high);
+}
+
+.severity-medium {
+  background: var(--medium);
+}
+
+.severity-low {
+  background: var(--low);
+}
+
+.report-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.report-buttons a {
+  background: #0f172a;
+  color: #fff;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.error-box {
+  background: #fef3f2;
+  color: #7a271a;
+  border: 1px solid #fecdca;
+  padding: 12px;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}

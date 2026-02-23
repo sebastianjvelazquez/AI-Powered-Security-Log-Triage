@@ -1,0 +1,2 @@
+2026-02-22T10:15:10Z EventID=4625 User=jdoe SrcIP=203.0.113.10 Status=FAILURE Message=An account failed to log on
+2026-02-22T10:16:11Z EventID=4672 User=Administrator SrcIP=198.51.100.20 Status=SUCCESS Message=Special admin privileges assigned

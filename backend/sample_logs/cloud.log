@@ -1,0 +1,2 @@
+2026-02-22T10:20:00Z provider=aws service=iam event=ConsoleLogin user=root sourceIp=198.51.100.200 status=Failed
+2026-02-22T10:20:30Z provider=aws service=iam event=ConsoleLogin user=admin sourceIp=203.0.113.123 status=Success
