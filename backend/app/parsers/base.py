@@ -12,11 +12,12 @@ class BaseLogParser(ABC):
 
     def parse_content(self, content: str) -> list[NormalizedEvent]:
         events: list[NormalizedEvent] = []
-        for raw_line in content.splitlines():
+        for line_number, raw_line in enumerate(content.splitlines(), start=1):
             line = raw_line.strip()
             if not line:
                 continue
             parsed = self.parse_line(line)
             if parsed is not None:
+                parsed.line_number = line_number
                 events.append(parsed)
         return events

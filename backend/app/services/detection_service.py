@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from app.core.config import get_settings
-from app.models.schemas import NormalizedEvent, SuspiciousEventOut
+from app.models.schemas import DetectionCandidate, NormalizedEvent
 from app.utils.ip_utils import is_public_ip, is_suspicious_ip
 
 settings = get_settings()
@@ -17,8 +17,8 @@ def _extract_destination_port(event_type: str) -> str | None:
     return parts[-1] if parts and parts[-1].isdigit() else None
 
 
-def detect_suspicious_events(events: list[NormalizedEvent]) -> tuple[list[SuspiciousEventOut], dict[str, int]]:
-    suspicious: list[SuspiciousEventOut] = []
+def detect_suspicious_events(events: list[NormalizedEvent]) -> tuple[list[DetectionCandidate], dict[str, int]]:
+    suspicious: list[DetectionCandidate] = []
     summary: dict[str, int] = defaultdict(int)
 
     failed_logins_by_source: dict[str, int] = defaultdict(int)
@@ -34,13 +34,14 @@ def detect_suspicious_events(events: list[NormalizedEvent]) -> tuple[list[Suspic
             if port:
                 blocked_ports_by_source[event.source_ip].add(port)
 
-    for event in events:
+    for normalized_event_index, event in enumerate(events):
         if event.status in {"failure", "failed"} and "auth" in event.event_type:
             key = event.source_ip or event.user or "unknown"
             if failed_logins_by_source[key] >= settings.failed_login_threshold:
                 suspicious.append(
-                    SuspiciousEventOut(
+                    DetectionCandidate(
                         **event.model_dump(),
+                        normalized_event_index=normalized_event_index,
                         rule_name="multiple_failed_logins",
                         reason=(
                             f"Detected {failed_logins_by_source[key]} failed login attempts for identity/source '{key}'"
@@ -52,8 +53,9 @@ def detect_suspicious_events(events: list[NormalizedEvent]) -> tuple[list[Suspic
 
         if event.event_type == "privilege_escalation" or "sudo" in event.raw_message.lower():
             suspicious.append(
-                SuspiciousEventOut(
+                DetectionCandidate(
                     **event.model_dump(),
+                    normalized_event_index=normalized_event_index,
                     rule_name="privilege_escalation",
                     reason="Possible privilege escalation behavior in log record",
                     risk_weight=70,
@@ -63,8 +65,9 @@ def detect_suspicious_events(events: list[NormalizedEvent]) -> tuple[list[Suspic
 
         if is_suspicious_ip(event.source_ip):
             suspicious.append(
-                SuspiciousEventOut(
+                DetectionCandidate(
                     **event.model_dump(),
+                    normalized_event_index=normalized_event_index,
                     rule_name="suspicious_ip",
                     reason=f"Source IP {event.source_ip} matches suspicious network range",
                     risk_weight=45,
@@ -76,8 +79,9 @@ def detect_suspicious_events(events: list[NormalizedEvent]) -> tuple[list[Suspic
             unique_ports = blocked_ports_by_source[event.source_ip]
             if len(unique_ports) >= settings.port_scan_threshold:
                 suspicious.append(
-                    SuspiciousEventOut(
+                    DetectionCandidate(
                         **event.model_dump(),
+                        normalized_event_index=normalized_event_index,
                         rule_name="port_scanning_pattern",
                         reason=(
                             f"Source {event.source_ip} probed {len(unique_ports)} unique blocked destination ports"
@@ -90,8 +94,9 @@ def detect_suspicious_events(events: list[NormalizedEvent]) -> tuple[list[Suspic
         if (event.user or "").lower() in ADMIN_USERS and event.status in {"success", "succeeded"}:
             if is_public_ip(event.source_ip):
                 suspicious.append(
-                    SuspiciousEventOut(
+                    DetectionCandidate(
                         **event.model_dump(),
+                        normalized_event_index=normalized_event_index,
                         rule_name="unusual_admin_access",
                         reason="Administrative account access from public source IP",
                         risk_weight=65,

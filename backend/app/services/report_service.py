@@ -13,11 +13,15 @@ def build_report_json(detail: IncidentDetailResponse) -> dict:
 
 def build_report_markdown(detail: IncidentDetailResponse) -> str:
     analysis = detail.analysis
+    score = detail.score
     lines = [
         "# Incident Report",
         "",
-        f"- Incident ID: {detail.upload_id}",
-        f"- Filename: {detail.filename}",
+        f"- Incident ID: {detail.incident_id}",
+        f"- Upload ID: {detail.upload_id if detail.upload_id is not None else 'N/A'}",
+        f"- Title: {detail.title}",
+        f"- Status: {detail.status}",
+        f"- Filename: {detail.filename or 'N/A'}",
         f"- Source Type: {detail.source_type}",
         f"- Uploaded At: {detail.uploaded_at.isoformat()}Z",
         f"- Suspicious Events: {detail.suspicious_count}",
@@ -42,6 +46,21 @@ def build_report_markdown(detail: IncidentDetailResponse) -> str:
         )
         for action in analysis.recommended_actions:
             lines.append(f"- {action}")
+
+    if score:
+        lines.extend(
+            [
+                "",
+                "## Score Breakdown",
+                "",
+                f"- Total Score: {score.total_score}",
+                f"- Derived Severity: {score.severity}",
+                f"- Scoring Version: {score.scoring_version}",
+                f"- Rule Score: {score.breakdown.rule_score}",
+                f"- LLM Confidence: {score.breakdown.llm_confidence}",
+                f"- Asset Criticality: {score.breakdown.asset_criticality}",
+            ]
+        )
 
     lines.extend(["", "## Suspicious Events"])
     for idx, event in enumerate(detail.suspicious_events, start=1):
