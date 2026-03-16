@@ -10,7 +10,6 @@ from app.models.schemas import (
     IncidentDetailResponse,
     IncidentEnrichmentView,
     IncidentHistoryItem,
-    IncidentScoreBreakdown,
     IncidentScoreView,
     LLMAnalysisOutput,
     SuspiciousEventOut,
@@ -87,12 +86,7 @@ class IncidentService:
         score = None
         current_score = next((item for item in sorted(incident.scores, key=lambda item: item.created_at, reverse=True) if item.is_current), None)
         if current_score is not None:
-            score = IncidentScoreView(
-                total_score=current_score.total_score,
-                severity=current_score.severity,
-                scoring_version=current_score.scoring_version,
-                breakdown=IncidentScoreBreakdown.model_validate(current_score.score_breakdown),
-            )
+            score = IncidentScoreView.model_validate(current_score.score_breakdown)
 
         suspicious_events = [
             SuspiciousEventOut(

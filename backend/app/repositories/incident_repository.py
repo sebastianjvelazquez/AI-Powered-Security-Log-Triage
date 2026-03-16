@@ -19,7 +19,7 @@ from app.models.db_models import (
     Upload,
 )
 from app.models.enums import AuditActorType, IndicatorType
-from app.models.schemas import DetectionCandidate, IncidentScoreBreakdown, LLMAnalysisOutput, NormalizedEvent
+from app.models.schemas import DetectionCandidate, IncidentScoreView, LLMAnalysisOutput, NormalizedEvent
 from app.utils.time_utils import parse_event_timestamp
 
 
@@ -208,20 +208,17 @@ class IncidentRepository:
         db: Session,
         *,
         incident: Incident,
-        total_score: float,
-        severity: str,
-        scoring_version: str,
-        breakdown: IncidentScoreBreakdown,
+        score_view: IncidentScoreView,
     ) -> IncidentScore:
         for existing_score in incident.scores:
             existing_score.is_current = False
 
         score = IncidentScore(
             incident_id=incident.id,
-            total_score=total_score,
-            severity=severity,
-            scoring_version=scoring_version,
-            score_breakdown=breakdown.model_dump(mode="json"),
+            total_score=score_view.total_score,
+            severity=score_view.severity,
+            scoring_version=score_view.scoring_version,
+            score_breakdown=score_view.model_dump(mode="json"),
         )
         db.add(score)
         db.flush()

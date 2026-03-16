@@ -11,7 +11,6 @@ from app.models.db_models import Upload
 from app.models.schemas import (
     DetectionCandidate,
     IncidentBundle,
-    IncidentScoreBreakdown,
     LLMAnalysisOutput,
     SuspiciousEventOut,
     UploadResponse,
@@ -19,7 +18,7 @@ from app.models.schemas import (
 from app.repositories.incident_repository import IncidentRepository
 from app.services.detection_service import detect_suspicious_events
 from app.services.normalization_service import parse_and_normalize_logs
-from app.services.risk_scoring import compute_risk_score, severity_from_score
+from app.services.risk_scoring import build_incident_score
 from app.utils.time_utils import parse_event_timestamp
 
 settings = get_settings()
@@ -142,12 +141,17 @@ class ProcessingPipelineService:
                 detection_summary=detection_summary,
             )
             llm_output = self.llm_analyzer.analyze_with_fallback(bundle)
-            risk_score = compute_risk_score(
+            initial_score = build_incident_score(
                 rule_weights=[event.risk_weight for event in suspicious_events],
                 llm_analysis=llm_output,
                 asset_criticality=settings.asset_criticality,
+                suspicious_event_count=len(suspicious_events),
+                detection_summary=detection_summary,
+                threat_intel_hits=0,
+                correlation_strength=0,
             )
-            final_severity = severity_from_score(risk_score)
+            risk_score = initial_score.total_score
+            final_severity = initial_score.severity
             llm_analysis_for_response = llm_output.model_copy(update={"severity": final_severity})
         else:
             risk_score = 0.0
@@ -230,20 +234,22 @@ class ProcessingPipelineService:
         self.repository.add_llm_enrichment(db, incident=incident, analysis=llm_analysis_for_response)
 
         notify("scoring")
-        breakdown = IncidentScoreBreakdown(
-            rule_score=sum(event.risk_weight for event in suspicious_events),
-            llm_confidence=llm_analysis_for_response.confidence_score,
+        correlation_strength = int(correlation_decision.context.get("score", 0)) if correlation_decision.context else 0
+        score_view = build_incident_score(
+            rule_weights=[event.risk_weight for event in suspicious_events],
+            llm_analysis=llm_analysis_for_response,
             asset_criticality=settings.asset_criticality,
             suspicious_event_count=len(suspicious_events),
             detection_summary=detection_summary,
+            threat_intel_hits=0,
+            correlation_strength=correlation_strength,
         )
+        incident.severity = score_view.severity
+        incident.risk_score = score_view.total_score
         self.repository.add_score(
             db,
             incident=incident,
-            total_score=max(risk_score, incident.risk_score),
-            severity=incident.severity,
-            scoring_version="v1",
-            breakdown=breakdown,
+            score_view=score_view,
         )
         self.repository.add_audit_log(
             db,
@@ -295,6 +301,6 @@ class ProcessingPipelineService:
             suspicious_count=len(suspicious_events),
             suspicious_events=suspicious_events,
             severity=incident.severity,
-            risk_score=max(risk_score, incident.risk_score),
+            risk_score=incident.risk_score,
             analysis=llm_analysis_for_response,
         )

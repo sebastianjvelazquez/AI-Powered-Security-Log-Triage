@@ -66,11 +66,15 @@ def build_report_markdown(detail: IncidentDetailResponse) -> str:
                 f"- Total Score: {score.total_score}",
                 f"- Derived Severity: {score.severity}",
                 f"- Scoring Version: {score.scoring_version}",
-                f"- Rule Score: {score.breakdown.rule_score}",
-                f"- LLM Confidence: {score.breakdown.llm_confidence}",
-                f"- Asset Criticality: {score.breakdown.asset_criticality}",
+                f"- Suspicious Event Count: {score.summary.suspicious_event_count}",
+                f"- Threat Intel Hits: {score.summary.threat_intel_hits}",
+                f"- Correlation Strength: {score.summary.correlation_strength}",
             ]
         )
+        lines.append("")
+        lines.append("### Components")
+        for component in score.breakdown:
+            lines.append(f"- {component.component}: {component.score}/{component.max_score} ({component.rationale})")
 
     lines.extend(["", "## Suspicious Events"])
     for idx, event in enumerate(detail.suspicious_events, start=1):

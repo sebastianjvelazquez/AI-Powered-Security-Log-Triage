@@ -62,18 +62,25 @@ class LLMAnalysisOutput(BaseModel):
 
 
 class IncidentScoreBreakdown(BaseModel):
-    rule_score: float
-    llm_confidence: int
-    asset_criticality: float
+    component: str
+    score: float
+    max_score: float
+    rationale: str
+
+
+class IncidentScoreSummary(BaseModel):
     suspicious_event_count: int
     detection_summary: dict[str, int]
+    threat_intel_hits: int
+    correlation_strength: int
 
 
 class IncidentScoreView(BaseModel):
     total_score: float
     severity: str
     scoring_version: str
-    breakdown: IncidentScoreBreakdown
+    breakdown: list[IncidentScoreBreakdown]
+    summary: IncidentScoreSummary
 
 
 class IncidentEnrichmentView(BaseModel):
