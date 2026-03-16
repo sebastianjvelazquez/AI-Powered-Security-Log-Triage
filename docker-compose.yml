@@ -12,17 +12,44 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
   backend:
     build:
       context: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://triage_user:triage_pass@db:5432/security_triage
+      UPLOAD_STORAGE_DIR: /app/data/uploads
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       FRONTEND_ORIGIN: http://localhost:5173
     ports:
       - "8000:8000"
     depends_on:
       - db
+      - redis
+    volumes:
+      - upload_data:/app/data/uploads
+
+  worker:
+    build:
+      context: ./backend
+    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+psycopg://triage_user:triage_pass@db:5432/security_triage
+      UPLOAD_STORAGE_DIR: /app/data/uploads
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - upload_data:/app/data/uploads
 
   frontend:
     build:
@@ -36,3 +63,4 @@ services:
 
 volumes:
   postgres_data:
+  upload_data:

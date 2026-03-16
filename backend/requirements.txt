@@ -7,3 +7,4 @@ alembic==1.16.5
 psycopg[binary]==3.2.13
 requests==2.32.5
 python-multipart==0.0.20
+celery[redis]==5.5.3

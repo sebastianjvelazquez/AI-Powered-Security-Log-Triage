@@ -9,9 +9,13 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     database_url: str = "sqlite:///./security_triage.db"
+    upload_storage_dir: str = "./data/uploads"
 
     max_upload_mb: int = 10
     allowed_extensions: str = "log,txt,json,csv"
+
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
 
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"

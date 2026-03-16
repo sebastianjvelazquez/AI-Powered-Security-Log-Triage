@@ -6,7 +6,7 @@ from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Intege
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.enums import AuditActorType, EnrichmentStatus, IncidentStatus, IndicatorType
+from app.models.enums import AuditActorType, EnrichmentStatus, IncidentStatus, IndicatorType, JobStatus, ProcessingStage
 
 
 class Upload(Base):
@@ -15,6 +15,11 @@ class Upload(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     source_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    processing_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ProcessingStage.COMPLETED.value, index=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_lines: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     normalized_event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     detection_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -29,6 +34,7 @@ class Upload(Base):
     )
     incidents: Mapped[list["Incident"]] = relationship("Incident", back_populates="upload", cascade="all, delete-orphan")
     audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="upload", cascade="all, delete-orphan")
+    jobs: Mapped[list["ProcessingJob"]] = relationship("ProcessingJob", back_populates="upload", cascade="all, delete-orphan")
 
 
 class Asset(Base):
@@ -233,6 +239,25 @@ class IOCache(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (UniqueConstraint("indicator", "indicator_type", "source", name="uq_ioc_cache_indicator"),)
+
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    job_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    upload_id: Mapped[int] = mapped_column(Integer, ForeignKey("uploads.id", ondelete="CASCADE"), nullable=False, index=True)
+    celery_task_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=JobStatus.QUEUED.value, index=True)
+    current_stage: Mapped[str] = mapped_column(String(32), nullable=False, default=ProcessingStage.UPLOADED.value, index=True)
+    stage_history: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False, default=list)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    upload: Mapped["Upload"] = relationship("Upload", back_populates="jobs")
 
 
 Index("ix_detections_upload_rule", DetectionRecord.upload_id, DetectionRecord.rule_name)

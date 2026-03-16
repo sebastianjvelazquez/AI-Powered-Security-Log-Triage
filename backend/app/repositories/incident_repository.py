@@ -23,10 +23,22 @@ from app.utils.time_utils import parse_event_timestamp
 
 
 class IncidentRepository:
-    def create_upload(self, db: Session, *, filename: str, source_type: str, total_lines: int, normalized_event_count: int) -> Upload:
+    def create_upload(
+        self,
+        db: Session,
+        *,
+        filename: str,
+        source_type: str,
+        total_lines: int,
+        normalized_event_count: int,
+        storage_path: str | None = None,
+        processing_status: str = "completed",
+    ) -> Upload:
         upload = Upload(
             filename=filename,
             source_type=source_type,
+            storage_path=storage_path,
+            processing_status=processing_status,
             total_lines=total_lines,
             normalized_event_count=normalized_event_count,
         )

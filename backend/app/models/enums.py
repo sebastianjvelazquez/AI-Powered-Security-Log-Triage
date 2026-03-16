@@ -25,3 +25,22 @@ class IndicatorType(StrEnum):
     DOMAIN = "domain"
     HASH = "hash"
     USER = "user"
+
+
+class JobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ProcessingStage(StrEnum):
+    UPLOADED = "uploaded"
+    PARSING = "parsing"
+    DETECTING = "detecting"
+    CORRELATING = "correlating"
+    ENRICHING = "enriching"
+    SCORING = "scoring"
+    REPORT_GENERATION = "report_generation"
+    COMPLETED = "completed"
+    FAILED = "failed"

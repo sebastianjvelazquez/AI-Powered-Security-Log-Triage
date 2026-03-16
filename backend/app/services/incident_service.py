@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.llm.ollama_client import ResilientLLMAnalyzer
 from app.models.db_models import Incident, Upload
 from app.models.schemas import (
     AnalystReviewView,
-    DetectionCandidate,
-    IncidentBundle,
     IncidentDetailResponse,
     IncidentEnrichmentView,
     IncidentHistoryItem,
@@ -22,30 +17,7 @@ from app.models.schemas import (
     UploadResponse,
 )
 from app.repositories.incident_repository import IncidentRepository
-from app.services.detection_service import detect_suspicious_events
-from app.services.normalization_service import parse_and_normalize_logs
-from app.services.risk_scoring import compute_risk_score, severity_from_score
-
-settings = get_settings()
-
-
-def _candidate_to_api_event(candidate: DetectionCandidate) -> SuspiciousEventOut:
-    return SuspiciousEventOut(**candidate.model_dump(exclude={"normalized_event_index"}))
-
-
-def _pick_incident_title(source_type: str, suspicious_events: list[SuspiciousEventOut], severity: str) -> str:
-    if not suspicious_events:
-        return f"{source_type.capitalize()} upload review with no suspicious findings"
-
-    primary_rule = suspicious_events[0].rule_name.replace("_", " ")
-    return f"{severity} {source_type.capitalize()} incident: {primary_rule}"
-
-
-def _pick_time_bounds(values: Iterable) -> tuple[object | None, object | None]:
-    filtered = [value for value in values if value is not None]
-    if not filtered:
-        return None, None
-    return min(filtered), max(filtered)
+from app.services.processing_pipeline_service import ProcessingPipelineService
 
 
 class IncidentService:
@@ -53,142 +25,20 @@ class IncidentService:
         self,
         llm_analyzer: ResilientLLMAnalyzer | None = None,
         repository: IncidentRepository | None = None,
+        pipeline_service: ProcessingPipelineService | None = None,
     ) -> None:
-        self.llm_analyzer = llm_analyzer or ResilientLLMAnalyzer()
         self.repository = repository or IncidentRepository()
+        self.pipeline_service = pipeline_service or ProcessingPipelineService(
+            llm_analyzer=llm_analyzer,
+            repository=self.repository,
+        )
 
     def process_upload(self, db: Session, *, filename: str, source_type: str, content: str) -> UploadResponse:
-        normalized_events = parse_and_normalize_logs(source_type=source_type, content=content)
-        detection_candidates, detection_summary = detect_suspicious_events(normalized_events)
-        suspicious_events = [_candidate_to_api_event(candidate) for candidate in detection_candidates]
-
-        upload = self.repository.create_upload(
+        return self.pipeline_service.process_new_upload(
             db,
             filename=filename,
             source_type=source_type,
-            total_lines=len(content.splitlines()),
-            normalized_event_count=len(normalized_events),
-        )
-        self.repository.add_audit_log(
-            db,
-            action="upload.created",
-            entity_type="upload",
-            entity_id=str(upload.id),
-            upload_id=upload.id,
-            details={"filename": filename, "source_type": source_type},
-        )
-
-        normalized_event_records = self.repository.create_normalized_events(
-            db,
-            upload=upload,
-            normalized_events=normalized_events,
-        )
-        detection_records = self.repository.create_detections(
-            db,
-            upload=upload,
-            normalized_event_records=normalized_event_records,
-            detection_candidates=detection_candidates,
-        )
-
-        if suspicious_events:
-            bundle = IncidentBundle(
-                source_type=source_type,
-                suspicious_events=suspicious_events,
-                detection_summary=detection_summary,
-            )
-            llm_output = self.llm_analyzer.analyze_with_fallback(bundle)
-            risk_score = compute_risk_score(
-                rule_weights=[event.risk_weight for event in suspicious_events],
-                llm_analysis=llm_output,
-                asset_criticality=settings.asset_criticality,
-            )
-            final_severity = severity_from_score(risk_score)
-            llm_analysis_for_response = llm_output.model_copy(update={"severity": final_severity})
-        else:
-            risk_score = 0.0
-            final_severity = "Low"
-            llm_analysis_for_response = LLMAnalysisOutput(
-                severity=final_severity,
-                attack_type="No actionable suspicious activity detected",
-                mitre_techniques=["T1595"],
-                confidence_score=100,
-                analysis_summary="No suspicious patterns were identified by deterministic detection rules.",
-                recommended_actions=["Archive this log review and continue standard monitoring."],
-            )
-
-        first_seen_at, last_seen_at = _pick_time_bounds(event.observed_at for event in normalized_event_records)
-        incident = self.repository.create_incident(
-            db,
-            upload=upload,
-            asset=next((record.asset for record in normalized_event_records if record.asset is not None), None),
-            title=_pick_incident_title(source_type, suspicious_events, final_severity),
-            severity=final_severity,
-            risk_score=risk_score,
-            summary=llm_analysis_for_response.analysis_summary,
-            source_types=[source_type],
-            first_seen_at=first_seen_at,
-            last_seen_at=last_seen_at,
-        )
-
-        self.repository.link_incident_events(
-            db,
-            incident=incident,
-            normalized_event_records=normalized_event_records,
-            detection_records=detection_records,
-            detection_candidates=detection_candidates,
-        )
-        self.repository.add_llm_enrichment(db, incident=incident, analysis=llm_analysis_for_response)
-        breakdown = IncidentScoreBreakdown(
-            rule_score=sum(event.risk_weight for event in suspicious_events),
-            llm_confidence=llm_analysis_for_response.confidence_score,
-            asset_criticality=settings.asset_criticality,
-            suspicious_event_count=len(suspicious_events),
-            detection_summary=detection_summary,
-        )
-        self.repository.add_score(
-            db,
-            incident=incident,
-            total_score=risk_score,
-            severity=final_severity,
-            scoring_version="v1",
-            breakdown=breakdown,
-        )
-        self.repository.add_audit_log(
-            db,
-            action="incident.created",
-            entity_type="incident",
-            entity_id=str(incident.id),
-            upload_id=upload.id,
-            incident_id=incident.id,
-            details={"severity": final_severity, "title": incident.title},
-        )
-
-        seen_iocs: set[str] = set()
-        for suspicious_event in suspicious_events:
-            if suspicious_event.source_ip and suspicious_event.source_ip not in seen_iocs:
-                seen_iocs.add(suspicious_event.source_ip)
-                self.repository.upsert_ioc(
-                    db,
-                    indicator=suspicious_event.source_ip,
-                    is_malicious=True,
-                    reputation_score=float(suspicious_event.risk_weight),
-                )
-
-        db.commit()
-
-        return UploadResponse(
-            upload_id=upload.id,
-            incident_id=incident.id,
-            filename=upload.filename,
-            source_type=upload.source_type,
-            title=incident.title,
-            status=incident.status,
-            total_lines=upload.total_lines,
-            suspicious_count=len(suspicious_events),
-            suspicious_events=suspicious_events,
-            severity=final_severity,
-            risk_score=risk_score,
-            analysis=llm_analysis_for_response,
+            content=content,
         )
 
     def get_history(self, db: Session) -> list[IncidentHistoryItem]:

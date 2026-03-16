@@ -108,6 +108,25 @@ class UploadResponse(BaseModel):
     analysis: LLMAnalysisOutput
 
 
+class UploadJobResponse(BaseModel):
+    upload_id: int
+    job_id: str
+    status: str
+    current_stage: str
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    upload_id: int
+    status: str
+    current_stage: str
+    error_message: str | None = None
+    incident_id: int | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class IncidentHistoryItem(BaseModel):
     incident_id: int
     upload_id: int | None = None
