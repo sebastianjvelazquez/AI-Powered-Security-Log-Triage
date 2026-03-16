@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 
 from sqlalchemy.orm import Session
 
+from app.correlation.engine import correlate_incident, correlation_lookback_start
 from app.core.config import get_settings
 from app.llm.ollama_client import ResilientLLMAnalyzer
 from app.models.db_models import Upload
@@ -43,6 +44,11 @@ def _pick_time_bounds(values: Iterable) -> tuple[object | None, object | None]:
     if not filtered:
         return None, None
     return min(filtered), max(filtered)
+
+
+def _non_null_values(*values: object | None) -> list[object]:
+    filtered = [value for value in values if value is not None]
+    return filtered
 
 
 class ProcessingPipelineService:
@@ -155,18 +161,65 @@ class ProcessingPipelineService:
                 recommended_actions=["Archive this log review and continue standard monitoring."],
             )
 
-        incident = self.repository.create_incident(
+        earliest_seen = correlation_lookback_start(
+            last_seen_candidates=[first_seen_at, last_seen_at],
+        )
+        correlation_candidates = self.repository.find_recent_correlatable_incidents(
             db,
-            upload=upload,
-            asset=next((record.asset for record in normalized_event_records if record.asset is not None), None),
-            title=_pick_incident_title(source_type, suspicious_events, final_severity),
+            earliest_seen=earliest_seen,
+        )
+        correlation_decision = correlate_incident(
+            source_type=source_type,
+            suspicious_events=suspicious_events,
+            normalized_event_records=normalized_event_records,
+            existing_incidents=[candidate for candidate in correlation_candidates if candidate.upload_id != upload.id],
             severity=final_severity,
             risk_score=risk_score,
-            summary=llm_analysis_for_response.analysis_summary,
-            source_types=[source_type],
-            first_seen_at=first_seen_at,
-            last_seen_at=last_seen_at,
         )
+
+        incident = correlation_decision.incident
+        if incident is None:
+            incident = self.repository.create_incident(
+                db,
+                upload=upload,
+                asset=next((record.asset for record in normalized_event_records if record.asset is not None), None),
+                title=correlation_decision.title,
+                severity=final_severity,
+                risk_score=risk_score,
+                summary=llm_analysis_for_response.analysis_summary,
+                source_types=[source_type],
+                first_seen_at=first_seen_at,
+                last_seen_at=last_seen_at,
+                correlation_summary=correlation_decision.summary,
+                correlation_context=correlation_decision.context,
+            )
+        else:
+            self.repository.link_incident_upload(
+                db,
+                incident=incident,
+                upload=upload,
+                relation_type=correlation_decision.relation_type,
+            )
+            merged_source_types = sorted(set(incident.source_types) | {source_type})
+            merged_first_seen_values = _non_null_values(incident.first_seen_at, first_seen_at)
+            merged_last_seen_values = _non_null_values(incident.last_seen_at, last_seen_at)
+            merged_first_seen = min(merged_first_seen_values) if merged_first_seen_values else None
+            merged_last_seen = max(merged_last_seen_values) if merged_last_seen_values else None
+            resolved_severity = final_severity if risk_score >= incident.risk_score else incident.severity
+            resolved_score = max(risk_score, incident.risk_score)
+            self.repository.update_incident_correlation(
+                db,
+                incident=incident,
+                title=correlation_decision.title,
+                source_types=merged_source_types,
+                first_seen_at=merged_first_seen,
+                last_seen_at=merged_last_seen,
+                severity=resolved_severity,
+                risk_score=resolved_score,
+                correlation_summary=correlation_decision.summary,
+                correlation_context=correlation_decision.context,
+            )
+
         self.repository.link_incident_events(
             db,
             incident=incident,
@@ -187,19 +240,24 @@ class ProcessingPipelineService:
         self.repository.add_score(
             db,
             incident=incident,
-            total_score=risk_score,
-            severity=final_severity,
+            total_score=max(risk_score, incident.risk_score),
+            severity=incident.severity,
             scoring_version="v1",
             breakdown=breakdown,
         )
         self.repository.add_audit_log(
             db,
-            action="incident.created",
+            action="incident.correlated" if correlation_decision.incident is not None else "incident.created",
             entity_type="incident",
             entity_id=str(incident.id),
             upload_id=upload.id,
             incident_id=incident.id,
-            details={"severity": final_severity, "title": incident.title},
+            details={
+                "severity": incident.severity,
+                "title": incident.title,
+                "correlation_summary": correlation_decision.summary,
+                "relation_type": correlation_decision.relation_type,
+            },
         )
 
         seen_iocs: set[str] = set()
@@ -236,7 +294,7 @@ class ProcessingPipelineService:
             total_lines=upload.total_lines,
             suspicious_count=len(suspicious_events),
             suspicious_events=suspicious_events,
-            severity=final_severity,
-            risk_score=risk_score,
+            severity=incident.severity,
+            risk_score=max(risk_score, incident.risk_score),
             analysis=llm_analysis_for_response,
         )

@@ -55,7 +55,7 @@ class IncidentService:
                     filename=upload.filename if upload else None,
                     source_type=upload.source_type if upload else (incident.source_types[0] if incident.source_types else "unknown"),
                     status=incident.status,
-                    suspicious_count=upload.detection_count if upload else len(incident.incident_events),
+                    suspicious_count=len(incident.incident_events),
                     severity=incident.severity,
                     risk_score=incident.risk_score,
                     uploaded_at=upload.uploaded_at if upload else incident.created_at,
@@ -97,6 +97,7 @@ class IncidentService:
         suspicious_events = [
             SuspiciousEventOut(
                 timestamp=link.normalized_event.timestamp_raw,
+                hostname=link.normalized_event.hostname,
                 source_ip=link.normalized_event.source_ip,
                 destination_ip=link.normalized_event.destination_ip,
                 user=link.normalized_event.user,
@@ -135,6 +136,8 @@ class IncidentService:
             suspicious_events=suspicious_events,
             analysis=analysis,
             score=score,
+            correlation_summary=incident.correlation_summary,
+            correlation_context=incident.correlation_context,
             enrichments=enrichments,
             analyst_reviews=analyst_reviews,
         )

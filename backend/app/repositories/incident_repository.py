@@ -12,6 +12,7 @@ from app.models.db_models import (
     Incident,
     IncidentEnrichment,
     IncidentEventLink,
+    IncidentUploadLink,
     IncidentScore,
     IOCache,
     NormalizedEventRecord,
@@ -73,6 +74,7 @@ class IncidentRepository:
                 line_number=event.line_number,
                 observed_at=parse_event_timestamp(event.timestamp),
                 timestamp_raw=event.timestamp,
+                hostname=event.hostname,
                 source_ip=event.source_ip,
                 destination_ip=event.destination_ip,
                 user=event.user,
@@ -130,6 +132,8 @@ class IncidentRepository:
         source_types: list[str],
         first_seen_at: datetime | None,
         last_seen_at: datetime | None,
+        correlation_summary: str | None = None,
+        correlation_context: dict[str, object] | None = None,
     ) -> Incident:
         incident = Incident(
             upload_id=upload.id,
@@ -138,14 +142,43 @@ class IncidentRepository:
             severity=severity,
             risk_score=risk_score,
             summary=summary,
+            correlation_summary=correlation_summary,
+            correlation_context=correlation_context,
             source_types=source_types,
             first_seen_at=first_seen_at,
             last_seen_at=last_seen_at,
         )
         db.add(incident)
+        db.flush()
+        self.link_incident_upload(db, incident=incident, upload=upload, relation_type="primary")
+        return incident
+
+    def link_incident_upload(
+        self,
+        db: Session,
+        *,
+        incident: Incident,
+        upload: Upload,
+        relation_type: str,
+    ) -> IncidentUploadLink:
+        existing = db.scalar(
+            select(IncidentUploadLink).where(
+                IncidentUploadLink.incident_id == incident.id,
+                IncidentUploadLink.upload_id == upload.id,
+            )
+        )
+        if existing is not None:
+            return existing
+
+        link = IncidentUploadLink(
+            incident_id=incident.id,
+            upload_id=upload.id,
+            relation_type=relation_type,
+        )
+        db.add(link)
         upload.incident_count = 1
         db.flush()
-        return incident
+        return link
 
     def link_incident_events(
         self,
@@ -180,6 +213,9 @@ class IncidentRepository:
         scoring_version: str,
         breakdown: IncidentScoreBreakdown,
     ) -> IncidentScore:
+        for existing_score in incident.scores:
+            existing_score.is_current = False
+
         score = IncidentScore(
             incident_id=incident.id,
             total_score=total_score,
@@ -190,6 +226,31 @@ class IncidentRepository:
         db.add(score)
         db.flush()
         return score
+
+    def update_incident_correlation(
+        self,
+        db: Session,
+        *,
+        incident: Incident,
+        title: str,
+        source_types: list[str],
+        first_seen_at: datetime | None,
+        last_seen_at: datetime | None,
+        severity: str,
+        risk_score: float,
+        correlation_summary: str,
+        correlation_context: dict[str, object],
+    ) -> Incident:
+        incident.title = title
+        incident.source_types = source_types
+        incident.first_seen_at = first_seen_at
+        incident.last_seen_at = last_seen_at
+        incident.severity = severity
+        incident.risk_score = risk_score
+        incident.correlation_summary = correlation_summary
+        incident.correlation_context = correlation_context
+        db.flush()
+        return incident
 
     def add_llm_enrichment(
         self, db: Session, *, incident: Incident, analysis: LLMAnalysisOutput, provider: str = "ollama"
@@ -263,9 +324,11 @@ class IncidentRepository:
     def get_incident_by_upload(self, db: Session, *, upload_id: int) -> Incident | None:
         stmt = (
             select(Incident)
-            .where(Incident.upload_id == upload_id)
+            .join(IncidentUploadLink, IncidentUploadLink.incident_id == Incident.id)
+            .where(IncidentUploadLink.upload_id == upload_id)
             .options(
                 joinedload(Incident.upload),
+                joinedload(Incident.upload_links).joinedload(IncidentUploadLink.upload),
                 joinedload(Incident.enrichments),
                 joinedload(Incident.scores),
                 joinedload(Incident.analyst_reviews),
@@ -275,3 +338,18 @@ class IncidentRepository:
             )
         )
         return db.scalars(stmt).unique().one_or_none()
+
+    def find_recent_correlatable_incidents(self, db: Session, *, earliest_seen: datetime | None) -> list[Incident]:
+        stmt = (
+            select(Incident)
+            .options(
+                joinedload(Incident.upload),
+                joinedload(Incident.upload_links).joinedload(IncidentUploadLink.upload),
+                joinedload(Incident.incident_events).joinedload(IncidentEventLink.normalized_event),
+                joinedload(Incident.incident_events).joinedload(IncidentEventLink.detection),
+            )
+            .order_by(Incident.last_seen_at.desc(), Incident.created_at.desc())
+        )
+        if earliest_seen is not None:
+            stmt = stmt.where((Incident.last_seen_at.is_not(None) & (Incident.last_seen_at >= earliest_seen)) | (Incident.created_at >= earliest_seen))
+        return list(db.scalars(stmt).unique().all())

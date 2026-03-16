@@ -35,6 +35,9 @@ class Upload(Base):
     incidents: Mapped[list["Incident"]] = relationship("Incident", back_populates="upload", cascade="all, delete-orphan")
     audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="upload", cascade="all, delete-orphan")
     jobs: Mapped[list["ProcessingJob"]] = relationship("ProcessingJob", back_populates="upload", cascade="all, delete-orphan")
+    incident_links: Mapped[list["IncidentUploadLink"]] = relationship(
+        "IncidentUploadLink", back_populates="upload", cascade="all, delete-orphan"
+    )
 
 
 class Asset(Base):
@@ -63,6 +66,7 @@ class NormalizedEventRecord(Base):
     line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     observed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     timestamp_raw: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     source_ip: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     destination_ip: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     user: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -117,6 +121,8 @@ class Incident(Base):
     severity: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     risk_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correlation_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correlation_context: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     first_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
@@ -124,6 +130,9 @@ class Incident(Base):
 
     upload: Mapped["Upload | None"] = relationship("Upload", back_populates="incidents")
     asset: Mapped["Asset | None"] = relationship("Asset", back_populates="incidents")
+    upload_links: Mapped[list["IncidentUploadLink"]] = relationship(
+        "IncidentUploadLink", back_populates="incident", cascade="all, delete-orphan"
+    )
     incident_events: Mapped[list["IncidentEventLink"]] = relationship(
         "IncidentEventLink", back_populates="incident", cascade="all, delete-orphan"
     )
@@ -158,6 +167,21 @@ class IncidentEventLink(Base):
     __table_args__ = (
         UniqueConstraint("incident_id", "normalized_event_id", "detection_id", name="uq_incident_event_detection"),
     )
+
+
+class IncidentUploadLink(Base):
+    __tablename__ = "incident_uploads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    incident_id: Mapped[int] = mapped_column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    upload_id: Mapped[int] = mapped_column(Integer, ForeignKey("uploads.id", ondelete="CASCADE"), nullable=False)
+    relation_type: Mapped[str] = mapped_column(String(32), nullable=False, default="primary")
+    linked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="upload_links")
+    upload: Mapped["Upload"] = relationship("Upload", back_populates="incident_links")
+
+    __table_args__ = (UniqueConstraint("incident_id", "upload_id", name="uq_incident_upload_link"),)
 
 
 class IncidentEnrichment(Base):

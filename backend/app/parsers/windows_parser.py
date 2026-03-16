@@ -26,6 +26,7 @@ class WindowsEventParser(BaseLogParser):
 
         return NormalizedEvent(
             timestamp=match.group("timestamp"),
+            hostname=None,
             source_ip=match.group("source_ip"),
             destination_ip=None,
             user=match.group("user"),

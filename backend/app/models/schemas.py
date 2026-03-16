@@ -9,6 +9,7 @@ SEVERITY_LEVELS = ("Low", "Medium", "High", "Critical")
 class NormalizedEvent(BaseModel):
     line_number: int | None = None
     timestamp: str | None = None
+    hostname: str | None = None
     source_ip: str | None = None
     destination_ip: str | None = None
     user: str | None = None
@@ -19,6 +20,7 @@ class NormalizedEvent(BaseModel):
 
 class SuspiciousEventOut(BaseModel):
     timestamp: str | None = None
+    hostname: str | None = None
     source_ip: str | None = None
     destination_ip: str | None = None
     user: str | None = None
@@ -153,5 +155,7 @@ class IncidentDetailResponse(BaseModel):
     suspicious_events: list[SuspiciousEventOut]
     analysis: LLMAnalysisOutput | None = None
     score: IncidentScoreView | None = None
+    correlation_summary: str | None = None
+    correlation_context: dict[str, Any] | None = None
     enrichments: list[IncidentEnrichmentView] = Field(default_factory=list)
     analyst_reviews: list[AnalystReviewView] = Field(default_factory=list)

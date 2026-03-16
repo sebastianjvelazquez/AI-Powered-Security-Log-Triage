@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     asset_criticality: float = Field(default=1.0, ge=0.5, le=3.0)
     failed_login_threshold: int = 3
     port_scan_threshold: int = 5
+    correlation_window_minutes: int = 120
 
     frontend_origin: str = "http://localhost:5173"
 

@@ -22,6 +22,7 @@ class FirewallLogParser(BaseLogParser):
 
         return NormalizedEvent(
             timestamp=match.group("timestamp"),
+            hostname=None,
             source_ip=match.group("src"),
             destination_ip=match.group("dst"),
             user=None,

@@ -28,6 +28,16 @@ def build_report_markdown(detail: IncidentDetailResponse) -> str:
         "",
     ]
 
+    if detail.correlation_summary:
+        lines.extend(
+            [
+                "## Correlation Summary",
+                "",
+                detail.correlation_summary,
+                "",
+            ]
+        )
+
     if analysis:
         lines.extend(
             [
