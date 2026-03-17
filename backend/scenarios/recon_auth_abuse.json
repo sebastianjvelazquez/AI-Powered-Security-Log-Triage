@@ -1,0 +1,26 @@
+{
+  "scenario_id": "recon_auth_abuse",
+  "name": "Recon to Authentication Abuse",
+  "description": "Firewall scan activity followed by repeated login failures from the same public source IP.",
+  "tags": ["firewall", "auth", "correlation", "reconnaissance"],
+  "uploads": [
+    {
+      "source_type": "firewall",
+      "filename": "recon_scan_firewall.log",
+      "content": "2026-03-02T10:00:00Z FW DROP SRC=198.51.100.23 DST=10.0.0.15 DPT=22 PROTO=TCP\n2026-03-02T10:00:01Z FW DROP SRC=198.51.100.23 DST=10.0.0.15 DPT=80 PROTO=TCP\n2026-03-02T10:00:02Z FW DROP SRC=198.51.100.23 DST=10.0.0.15 DPT=443 PROTO=TCP\n2026-03-02T10:00:03Z FW DROP SRC=198.51.100.23 DST=10.0.0.15 DPT=445 PROTO=TCP\n2026-03-02T10:00:04Z FW DROP SRC=198.51.100.23 DST=10.0.0.15 DPT=3389 PROTO=TCP"
+    },
+    {
+      "source_type": "auth",
+      "filename": "recon_followon_auth.log",
+      "content": "2026-03-02T10:05:00Z app-host sshd[201]: Failed password for invalid user admin from 198.51.100.23 port 52001 ssh2\n2026-03-02T10:05:02Z app-host sshd[202]: Failed password for invalid user admin from 198.51.100.23 port 52002 ssh2\n2026-03-02T10:05:04Z app-host sshd[203]: Failed password for invalid user admin from 198.51.100.23 port 52003 ssh2"
+    }
+  ],
+  "expected_outcome": {
+    "expected_incident_count": 1,
+    "expected_correlated_incident_count": 1,
+    "expected_min_severity": "High",
+    "expected_rule_hits": ["port_scanning_pattern", "multiple_failed_logins", "suspicious_ip"],
+    "expected_mitre_techniques": ["T1046", "T1110"],
+    "analyst_notes": "Expected to correlate firewall and auth telemetry into one incident."
+  }
+}

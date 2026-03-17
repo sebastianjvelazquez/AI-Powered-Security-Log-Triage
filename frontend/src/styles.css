@@ -516,6 +516,17 @@ textarea {
   opacity: 0.72;
 }
 
+.replay-run-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.scenario-card {
+  display: grid;
+  gap: 10px;
+}
+
 .job-banner {
   display: flex;
   justify-content: space-between;

@@ -242,6 +242,60 @@ class UploadJobResponse(BaseModel):
     current_stage: str
 
 
+class ReplayJobSummary(BaseModel):
+    upload_id: int
+    job_id: str
+    filename: str
+    source_type: str
+    status: str
+    current_stage: str
+
+
+class ScenarioExpectedOutcome(BaseModel):
+    expected_incident_count: int = Field(ge=0)
+    expected_correlated_incident_count: int = Field(ge=0)
+    expected_min_severity: str
+    expected_rule_hits: list[str] = Field(default_factory=list)
+    expected_mitre_techniques: list[str] = Field(default_factory=list)
+    analyst_notes: str
+
+
+class ScenarioUploadDefinition(BaseModel):
+    source_type: str
+    filename: str
+    content: str
+
+
+class ScenarioPack(BaseModel):
+    scenario_id: str
+    name: str
+    description: str
+    tags: list[str] = Field(default_factory=list)
+    uploads: list[ScenarioUploadDefinition]
+    expected_outcome: ScenarioExpectedOutcome
+
+
+class ScenarioSummaryResponse(BaseModel):
+    scenario_id: str
+    name: str
+    description: str
+    tags: list[str] = Field(default_factory=list)
+    source_types: list[str] = Field(default_factory=list)
+    upload_count: int
+    expected_outcome: ScenarioExpectedOutcome
+
+
+class ScenarioDetailResponse(ScenarioSummaryResponse):
+    uploads: list[ScenarioUploadDefinition]
+
+
+class ScenarioReplayResponse(BaseModel):
+    scenario_id: str
+    name: str
+    jobs: list[ReplayJobSummary]
+    expected_outcome: ScenarioExpectedOutcome
+
+
 class JobStatusResponse(BaseModel):
     job_id: str
     upload_id: int

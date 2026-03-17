@@ -60,6 +60,9 @@ class IncidentRepository:
         db.flush()
         return upload
 
+    def get_upload_by_id(self, db: Session, *, upload_id: int) -> Upload | None:
+        return db.get(Upload, upload_id)
+
     def get_or_create_asset(self, db: Session, *, ip_address: str | None) -> Asset | None:
         if not ip_address:
             return None

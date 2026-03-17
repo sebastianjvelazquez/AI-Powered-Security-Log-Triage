@@ -23,6 +23,16 @@ export async function getIncidentHistory() {
   return requestJson(`${API_BASE}/incidents/history`);
 }
 
+export async function getScenarios() {
+  return requestJson(`${API_BASE}/scenarios`);
+}
+
+export async function replayScenario(scenarioId) {
+  return requestJson(`${API_BASE}/scenarios/${scenarioId}/replay`, {
+    method: "POST"
+  });
+}
+
 export async function getIncidentDetailById(incidentId) {
   return requestJson(`${API_BASE}/incidents/id/${incidentId}`);
 }

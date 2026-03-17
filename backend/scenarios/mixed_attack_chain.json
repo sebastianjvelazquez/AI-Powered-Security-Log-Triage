@@ -1,0 +1,36 @@
+{
+  "scenario_id": "mixed_attack_chain",
+  "name": "Mixed Multi-Source Attack Chain",
+  "description": "Combined reconnaissance, credential abuse, Windows privilege escalation, and cloud follow-on activity.",
+  "tags": ["mixed", "correlation", "attack-chain"],
+  "uploads": [
+    {
+      "source_type": "firewall",
+      "filename": "mixed_firewall.log",
+      "content": "2026-03-05T12:00:00Z FW DROP SRC=203.0.113.4 DST=10.0.0.21 DPT=22 PROTO=TCP\n2026-03-05T12:00:01Z FW DROP SRC=203.0.113.4 DST=10.0.0.21 DPT=80 PROTO=TCP\n2026-03-05T12:00:02Z FW DROP SRC=203.0.113.4 DST=10.0.0.21 DPT=443 PROTO=TCP\n2026-03-05T12:00:03Z FW DROP SRC=203.0.113.4 DST=10.0.0.21 DPT=445 PROTO=TCP\n2026-03-05T12:00:04Z FW DROP SRC=203.0.113.4 DST=10.0.0.21 DPT=3389 PROTO=TCP"
+    },
+    {
+      "source_type": "auth",
+      "filename": "mixed_auth.log",
+      "content": "2026-03-05T12:05:00Z db-host sshd[401]: Failed password for invalid user admin from 203.0.113.4 port 60001 ssh2\n2026-03-05T12:05:02Z db-host sshd[402]: Failed password for invalid user admin from 203.0.113.4 port 60002 ssh2\n2026-03-05T12:05:04Z db-host sshd[403]: Failed password for invalid user admin from 203.0.113.4 port 60003 ssh2"
+    },
+    {
+      "source_type": "windows",
+      "filename": "mixed_windows.log",
+      "content": "2026-03-05T12:11:00Z EventID=4672 User=admin SrcIP=203.0.113.4 Status=Succeeded Message=Admin privileges assigned on finance workstation"
+    },
+    {
+      "source_type": "cloud",
+      "filename": "mixed_cloud.log",
+      "content": "2026-03-05T12:18:00Z provider=aws service=IAM event=ConsoleLogin user=admin sourceIp=203.0.113.4 status=Succeeded"
+    }
+  ],
+  "expected_outcome": {
+    "expected_incident_count": 1,
+    "expected_correlated_incident_count": 1,
+    "expected_min_severity": "Critical",
+    "expected_rule_hits": ["port_scanning_pattern", "multiple_failed_logins", "privilege_escalation", "suspicious_ip", "unusual_admin_access"],
+    "expected_mitre_techniques": ["T1046", "T1068", "T1078.004", "T1110"],
+    "analyst_notes": "Expected to collapse into a single high-confidence incident with strong correlation context."
+  }
+}

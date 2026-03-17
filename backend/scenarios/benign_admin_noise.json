@@ -1,0 +1,26 @@
+{
+  "scenario_id": "benign_admin_noise",
+  "name": "Noisy Benign Admin Activity",
+  "description": "Internal administrative maintenance activity intended to validate low-risk handling and analyst closures.",
+  "tags": ["benign", "admin", "baseline"],
+  "uploads": [
+    {
+      "source_type": "auth",
+      "filename": "benign_admin_auth.log",
+      "content": "2026-03-06T07:00:00Z patch-host sshd[501]: Accepted password for admin from 10.0.0.25 port 51001 ssh2\n2026-03-06T07:00:10Z patch-host sshd[502]: Accepted password for admin from 10.0.0.25 port 51002 ssh2"
+    },
+    {
+      "source_type": "firewall",
+      "filename": "benign_admin_firewall.log",
+      "content": "2026-03-06T07:01:00Z FW ALLOW SRC=10.0.0.25 DST=10.0.0.40 DPT=443 PROTO=TCP"
+    }
+  ],
+  "expected_outcome": {
+    "expected_incident_count": 2,
+    "expected_correlated_incident_count": 0,
+    "expected_min_severity": "Low",
+    "expected_rule_hits": [],
+    "expected_mitre_techniques": ["T1595"],
+    "analyst_notes": "Useful for validating low-risk queue behavior and false-positive workflow handling."
+  }
+}

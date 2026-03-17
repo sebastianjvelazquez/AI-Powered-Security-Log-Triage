@@ -3,6 +3,8 @@ import {
   getIncidentDetailById,
   getIncidentHistory,
   getJobStatus,
+  getScenarios,
+  replayScenario,
   submitIncidentReview,
   updateIncidentStatus,
   uploadLogFile
@@ -33,6 +35,9 @@ export default function App() {
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [jobStatus, setJobStatus] = useState(null);
+  const [scenarios, setScenarios] = useState([]);
+  const [replayRun, setReplayRun] = useState(null);
+  const [replayingScenarioId, setReplayingScenarioId] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [submittingUpload, setSubmittingUpload] = useState(false);
@@ -101,8 +106,19 @@ export default function App() {
     }
   }
 
+  async function loadScenarios() {
+    try {
+      const data = await getScenarios();
+      setScenarios(data);
+    } catch (loadError) {
+      setError(loadError.message);
+      setScenarios([]);
+    }
+  }
+
   useEffect(() => {
     loadHistory();
+    loadScenarios();
     return () => {
       if (pollTimeoutRef.current) {
         window.clearTimeout(pollTimeoutRef.current);
@@ -130,6 +146,9 @@ export default function App() {
   };
 
   const startPollingJob = (jobId) => {
+    if (pollTimeoutRef.current) {
+      window.clearTimeout(pollTimeoutRef.current);
+    }
     async function poll() {
       try {
         const status = await getJobStatus(jobId);
@@ -152,6 +171,49 @@ export default function App() {
     poll();
   };
 
+  const startPollingReplay = (initialRun) => {
+    if (pollTimeoutRef.current) {
+      window.clearTimeout(pollTimeoutRef.current);
+    }
+
+    async function poll() {
+      try {
+        const updatedJobs = await Promise.all(
+          initialRun.jobs.map(async (job) => {
+            const status = await getJobStatus(job.job_id);
+            return {
+              ...job,
+              ...status
+            };
+          })
+        );
+
+        const nextRun = {
+          ...initialRun,
+          jobs: updatedJobs
+        };
+        setReplayRun(nextRun);
+
+        const completedIncident = updatedJobs.find((job) => job.incident_id);
+        if (completedIncident?.incident_id) {
+          await loadHistory(completedIncident.incident_id);
+        }
+
+        const allFinished = updatedJobs.every((job) => job.status === "completed" || job.status === "failed");
+        if (allFinished) {
+          setReplayingScenarioId("");
+          return;
+        }
+        pollTimeoutRef.current = window.setTimeout(poll, 1500);
+      } catch (pollError) {
+        setError(pollError.message);
+        setReplayingScenarioId("");
+      }
+    }
+
+    poll();
+  };
+
   const handleUpload = async (sourceType, file) => {
     setSubmittingUpload(true);
     setError("");
@@ -161,12 +223,28 @@ export default function App() {
       }
       const job = await uploadLogFile(sourceType, file);
       setJobStatus(job);
+      setReplayRun(null);
       setActiveView("upload");
       startPollingJob(job.job_id);
     } catch (uploadError) {
       setError(uploadError.message);
     } finally {
       setSubmittingUpload(false);
+    }
+  };
+
+  const handleReplay = async (scenarioId) => {
+    setReplayingScenarioId(scenarioId);
+    setError("");
+    try {
+      const replay = await replayScenario(scenarioId);
+      setReplayRun(replay);
+      setJobStatus(null);
+      setActiveView("upload");
+      startPollingReplay(replay);
+    } catch (replayError) {
+      setError(replayError.message);
+      setReplayingScenarioId("");
     }
   };
 
@@ -271,8 +349,17 @@ export default function App() {
           </div>
         </div>
       ) : null}
-
-      {activeView === "upload" ? <UploadPanel onSubmit={handleUpload} loading={submittingUpload} /> : null}
+      {activeView === "upload" ? (
+        <UploadPanel
+          onSubmit={handleUpload}
+          loading={submittingUpload}
+          scenarios={scenarios}
+          onReplay={handleReplay}
+          replayingScenarioId={replayingScenarioId}
+          replayRun={replayRun}
+          onOpenIncident={openIncident}
+        />
+      ) : null}
 
       {activeView === "evaluation" ? <EvaluationDashboard items={history} /> : null}
 

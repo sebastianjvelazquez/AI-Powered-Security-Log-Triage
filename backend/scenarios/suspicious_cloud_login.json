@@ -1,0 +1,21 @@
+{
+  "scenario_id": "suspicious_cloud_login",
+  "name": "Suspicious Cloud Admin Login",
+  "description": "Public cloud administrator access from a high-risk source with follow-on IAM activity.",
+  "tags": ["cloud", "iam", "admin-access"],
+  "uploads": [
+    {
+      "source_type": "cloud",
+      "filename": "cloud_admin_activity.log",
+      "content": "2026-03-04T08:00:00Z provider=aws service=IAM event=ConsoleLogin user=admin sourceIp=198.51.100.77 status=Succeeded\n2026-03-04T08:01:00Z provider=aws service=IAM event=CreateAccessKey user=admin sourceIp=198.51.100.77 status=Succeeded"
+    }
+  ],
+  "expected_outcome": {
+    "expected_incident_count": 1,
+    "expected_correlated_incident_count": 1,
+    "expected_min_severity": "High",
+    "expected_rule_hits": ["suspicious_ip", "unusual_admin_access"],
+    "expected_mitre_techniques": ["T1078.004"],
+    "analyst_notes": "Expected to prioritize suspicious public cloud admin access with enrichment hits."
+  }
+}

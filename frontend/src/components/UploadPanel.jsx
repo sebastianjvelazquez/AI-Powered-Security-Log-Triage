@@ -2,7 +2,22 @@ import { useState } from "react";
 
 const SOURCE_TYPES = ["auth", "firewall", "windows", "cloud"];
 
-export default function UploadPanel({ onSubmit, loading }) {
+function statusCounts(jobs) {
+  return jobs.reduce((accumulator, job) => {
+    accumulator[job.status] = (accumulator[job.status] || 0) + 1;
+    return accumulator;
+  }, {});
+}
+
+export default function UploadPanel({
+  onSubmit,
+  loading,
+  scenarios,
+  onReplay,
+  replayingScenarioId,
+  replayRun,
+  onOpenIncident
+}) {
   const [sourceType, setSourceType] = useState("auth");
   const [file, setFile] = useState(null);
 
@@ -13,6 +28,9 @@ export default function UploadPanel({ onSubmit, loading }) {
     }
     onSubmit(sourceType, file);
   };
+
+  const counts = replayRun ? statusCounts(replayRun.jobs) : {};
+  const openableJobs = replayRun ? replayRun.jobs.filter((job) => job.incident_id) : [];
 
   return (
     <section className="workspace-panel upload-view">
@@ -56,19 +74,80 @@ export default function UploadPanel({ onSubmit, loading }) {
         <section className="subpanel replay-panel">
           <h3>Scenario Replay</h3>
           <p className="muted-copy">
-            Replayable attack packs land in Phase 9. This workspace is reserved for password spray, recon chains,
-            privilege escalation, and noisy benign admin baselines.
+            Replay prebuilt attack packs through the same async ingestion path used for uploaded logs.
           </p>
+
+          {replayRun ? (
+            <div className="replay-run-card">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Active Replay</p>
+                  <h4>{replayRun.name}</h4>
+                </div>
+                <span className="count-pill">{replayRun.jobs.length} jobs</span>
+              </div>
+              <div className="chip-row">
+                {Object.entries(counts).map(([status, count]) => (
+                  <span key={status} className={`status-chip status-${status}`}>
+                    {status}: {count}
+                  </span>
+                ))}
+              </div>
+              <div className="mini-list">
+                {replayRun.jobs.map((job) => (
+                  <div key={job.job_id} className="mini-card">
+                    <strong>{job.filename}</strong>
+                    <p>
+                      {job.source_type} · {job.status} · {job.current_stage}
+                    </p>
+                    {job.error_message ? <p>{job.error_message}</p> : null}
+                    {job.incident_id ? (
+                      <button type="button" className="ghost-button" onClick={() => onOpenIncident(job.incident_id)}>
+                        Open Incident #{job.incident_id}
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              {openableJobs.length > 0 ? (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => onOpenIncident(openableJobs[0].incident_id)}
+                >
+                  Open First Completed Incident
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="scenario-list">
-            {[
-              "Password spray against exposed VPN",
-              "Recon to auth abuse sequence",
-              "Privilege escalation follow-on",
-              "Suspicious cloud login chain"
-            ].map((scenario) => (
-              <div key={scenario} className="mini-card disabled-card">
-                <strong>{scenario}</strong>
-                <p>Replay controls arrive in the scenario service phase.</p>
+            {scenarios.map((scenario) => (
+              <div key={scenario.scenario_id} className="mini-card scenario-card">
+                <strong>{scenario.name}</strong>
+                <p>{scenario.description}</p>
+                <div className="chip-row">
+                  {scenario.tags.map((tag) => (
+                    <span key={tag} className="mitre-chip">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                <p>
+                  Uploads: {scenario.upload_count} · Sources: {scenario.source_types.join(", ")}
+                </p>
+                <p>
+                  Expected: {scenario.expected_outcome.expected_min_severity} · Rules{" "}
+                  {scenario.expected_outcome.expected_rule_hits.join(", ") || "none"}
+                </p>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={Boolean(replayingScenarioId)}
+                  onClick={() => onReplay(scenario.scenario_id)}
+                >
+                  {replayingScenarioId === scenario.scenario_id ? "Launching..." : "Replay Scenario"}
+                </button>
               </div>
             ))}
           </div>
