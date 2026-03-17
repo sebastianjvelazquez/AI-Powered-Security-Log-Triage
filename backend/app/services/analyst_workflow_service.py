@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from app.models.enums import AnalystDisposition, AuditActorType, IncidentStatus
 from app.models.schemas import AnalystReviewCreateRequest, IncidentStatusUpdateRequest
+from app.observability.logging import get_logger, log_event
+from app.observability.metrics import metrics_registry
 from app.repositories.incident_repository import IncidentRepository
 from app.services.incident_service import IncidentService
 from sqlalchemy.orm import Session
+
+logger = get_logger(__name__)
 
 
 ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
@@ -64,6 +70,7 @@ class AnalystWorkflowService:
         incident_id: int,
         review_request: AnalystReviewCreateRequest,
     ):
+        started = perf_counter()
         incident = self.repository.get_incident_by_id(db, incident_id=incident_id)
         if incident is None:
             return None
@@ -159,6 +166,22 @@ class AnalystWorkflowService:
             )
 
         db.commit()
+        duration = perf_counter() - started
+        metrics_registry.increment("review_counts_total", labels={"disposition": review_request.disposition})
+        metrics_registry.observe("review_runtime_seconds", duration, labels={"action": "submit_review"})
+        if incident.upload and incident.upload.uploaded_at and review.created_at:
+            review_latency_minutes = (review.created_at - incident.upload.uploaded_at).total_seconds() / 60
+            metrics_registry.observe("review_time_minutes", review_latency_minutes, labels={"disposition": review_request.disposition})
+        log_event(
+            logger,
+            20,
+            "incident_review_submitted",
+            incident_id=incident.id,
+            reviewer=review_request.reviewer,
+            disposition=review_request.disposition,
+            target_status=target_status,
+            duration_seconds=round(duration, 4),
+        )
         return self.incident_service.get_incident_detail_by_id(db, incident_id=incident.id)
 
     def update_status(
@@ -168,6 +191,7 @@ class AnalystWorkflowService:
         incident_id: int,
         status_request: IncidentStatusUpdateRequest,
     ):
+        started = perf_counter()
         incident = self.repository.get_incident_by_id(db, incident_id=incident_id)
         if incident is None:
             return None
@@ -196,6 +220,18 @@ class AnalystWorkflowService:
             },
         )
         db.commit()
+        duration = perf_counter() - started
+        metrics_registry.observe("review_runtime_seconds", duration, labels={"action": "update_status"})
+        log_event(
+            logger,
+            20,
+            "incident_status_updated",
+            incident_id=incident.id,
+            reviewer=status_request.reviewer,
+            from_status=previous_status,
+            to_status=status_request.status,
+            duration_seconds=round(duration, 4),
+        )
         return self.incident_service.get_incident_detail_by_id(db, incident_id=incident.id)
 
     def _validate_transition(self, *, current_status: str, target_status: str) -> None:

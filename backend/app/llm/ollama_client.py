@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Callable, TypeVar
 
 import requests
@@ -21,9 +22,12 @@ from app.models.schemas import (
     LLMNarrativeOutput,
     LLMTaskTrace,
 )
+from app.observability.logging import get_logger, log_event
+from app.observability.metrics import metrics_registry
 from app.utils.mitre import map_rules_to_mitre
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 PROMPT_DIR = Path(__file__).with_name("prompts")
 PROMPT_VERSION = "v2"
@@ -183,8 +187,11 @@ class ResilientLLMAnalyzer:
         task_runner: Callable[[], tuple[TaskModel, str]],
         fallback_factory: Callable[[], TaskModel],
     ) -> tuple[TaskModel, LLMTaskTrace]:
+        started = perf_counter()
         try:
             result, raw_output = task_runner()
+            duration = perf_counter() - started
+            metrics_registry.observe("llm_task_runtime_seconds", duration, labels={"task_name": task_name, "status": "validated"})
             return result, LLMTaskTrace(
                 task_name=task_name,
                 prompt_name=prompt_name,
@@ -192,6 +199,20 @@ class ResilientLLMAnalyzer:
                 used_fallback=False,
             )
         except (requests.RequestException, LLMValidationError, ValueError) as exc:
+            duration = perf_counter() - started
+            metrics_registry.observe("llm_task_runtime_seconds", duration, labels={"task_name": task_name, "status": "fallback"})
+            metrics_registry.increment("llm_fallback_total", labels={"task_name": task_name})
+            if isinstance(exc, LLMValidationError):
+                metrics_registry.increment("invalid_llm_responses_total", labels={"task_name": task_name})
+            log_event(
+                logger,
+                30,
+                "llm_task_fallback",
+                task_name=task_name,
+                prompt_name=prompt_name,
+                error=str(exc),
+                duration_seconds=round(duration, 4),
+            )
             return fallback_factory(), LLMTaskTrace(
                 task_name=task_name,
                 prompt_name=prompt_name,

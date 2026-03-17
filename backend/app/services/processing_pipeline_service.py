@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from time import perf_counter
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,8 @@ from app.models.schemas import (
     SuspiciousEventOut,
     UploadResponse,
 )
+from app.observability.logging import get_logger, log_event
+from app.observability.metrics import metrics_registry
 from app.repositories.incident_repository import IncidentRepository
 from app.services.detection_service import detect_suspicious_events
 from app.services.normalization_service import parse_and_normalize_logs
@@ -25,6 +28,7 @@ from app.services.risk_scoring import build_incident_score
 from app.utils.time_utils import parse_event_timestamp
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 StageCallback = Callable[[str], None]
 
@@ -144,23 +148,61 @@ class ProcessingPipelineService:
         content: str,
         on_stage_change: StageCallback | None = None,
     ) -> UploadResponse:
+        pipeline_started = perf_counter()
+        stage_timings: dict[str, float] = {}
+
+        def run_stage(stage_name: str, action):
+            notify(stage_name)
+            started = perf_counter()
+            result = action()
+            duration = perf_counter() - started
+            stage_timings[stage_name] = duration
+            metrics_registry.observe("pipeline_stage_duration_seconds", duration, labels={"stage": stage_name})
+            log_event(
+                logger,
+                20,
+                "pipeline_stage_completed",
+                upload_id=upload.id,
+                source_type=source_type,
+                stage=stage_name,
+                duration_seconds=round(duration, 4),
+            )
+            return result
+
         def notify(stage: str) -> None:
             upload.processing_status = stage
             if on_stage_change is not None:
                 on_stage_change(stage)
 
-        notify("parsing")
-        normalized_events = parse_and_normalize_logs(source_type=source_type, content=content)
+        normalized_events = run_stage(
+            "parsing",
+            lambda: parse_and_normalize_logs(source_type=source_type, content=content),
+        )
         upload.total_lines = len(content.splitlines())
         upload.normalized_event_count = len(normalized_events)
+        parse_failures = max(upload.total_lines - upload.normalized_event_count, 0)
+        if parse_failures:
+            metrics_registry.increment("parse_failures_total", amount=parse_failures, labels={"source_type": source_type})
+            log_event(
+                logger,
+                30,
+                "parse_failures_detected",
+                upload_id=upload.id,
+                source_type=source_type,
+                parse_failures=parse_failures,
+                total_lines=upload.total_lines,
+                normalized_event_count=upload.normalized_event_count,
+            )
         normalized_event_records = self.repository.create_normalized_events(
             db,
             upload=upload,
             normalized_events=normalized_events,
         )
 
-        notify("detecting")
-        detection_candidates, detection_summary = detect_suspicious_events(normalized_events)
+        detection_candidates, detection_summary = run_stage(
+            "detecting",
+            lambda: detect_suspicious_events(normalized_events),
+        )
         suspicious_events = [_candidate_to_api_event(candidate) for candidate in detection_candidates]
         detection_records = self.repository.create_detections(
             db,
@@ -168,16 +210,19 @@ class ProcessingPipelineService:
             normalized_event_records=normalized_event_records,
             detection_candidates=detection_candidates,
         )
+        metrics_registry.increment("detections_fired_total", amount=len(detection_records), labels={"source_type": source_type})
 
-        notify("correlating")
-        first_seen_at, last_seen_at = _pick_time_bounds(
-            parse_event_timestamp(event.timestamp_raw) for event in normalized_event_records
+        first_seen_at, last_seen_at = run_stage(
+            "correlating",
+            lambda: _pick_time_bounds(parse_event_timestamp(event.timestamp_raw) for event in normalized_event_records),
         )
 
-        notify("enriching")
-        threat_intel_payload = self.threat_intel_service.enrich_suspicious_events(
-            db,
-            suspicious_events=suspicious_events,
+        threat_intel_payload = run_stage(
+            "enriching",
+            lambda: self.threat_intel_service.enrich_suspicious_events(
+                db,
+                suspicious_events=suspicious_events,
+            ),
         )
         threat_intel_hits = threat_intel_payload.summary.malicious_indicator_count
         if suspicious_events:
@@ -258,6 +303,7 @@ class ProcessingPipelineService:
                 correlation_summary=correlation_decision.summary,
                 correlation_context=correlation_decision.context,
             )
+            metrics_registry.increment("incidents_created_total", labels={"source_type": source_type})
         else:
             self.repository.link_incident_upload(
                 db,
@@ -312,16 +358,18 @@ class ProcessingPipelineService:
             payload=llm_trace.model_dump(mode="json"),
         )
 
-        notify("scoring")
         correlation_strength = int(correlation_decision.context.get("score", 0)) if correlation_decision.context else 0
-        score_view = build_incident_score(
-            rule_weights=[event.risk_weight for event in suspicious_events],
-            llm_analysis=llm_analysis_for_response,
-            asset_criticality=settings.asset_criticality,
-            suspicious_event_count=len(suspicious_events),
-            detection_summary=detection_summary,
-            threat_intel_hits=threat_intel_hits,
-            correlation_strength=correlation_strength,
+        score_view = run_stage(
+            "scoring",
+            lambda: build_incident_score(
+                rule_weights=[event.risk_weight for event in suspicious_events],
+                llm_analysis=llm_analysis_for_response,
+                asset_criticality=settings.asset_criticality,
+                suspicious_event_count=len(suspicious_events),
+                detection_summary=detection_summary,
+                threat_intel_hits=threat_intel_hits,
+                correlation_strength=correlation_strength,
+            ),
         )
         incident.severity = score_view.severity
         incident.risk_score = score_view.total_score
@@ -330,6 +378,7 @@ class ProcessingPipelineService:
             incident=incident,
             score_view=score_view,
         )
+        metrics_registry.increment("incident_score_distribution_total", labels={"severity": score_view.severity})
         self.repository.add_audit_log(
             db,
             action="incident.correlated" if correlation_decision.incident is not None else "incident.created",
@@ -357,6 +406,7 @@ class ProcessingPipelineService:
                 )
 
         notify("report_generation")
+        report_started = perf_counter()
         self.repository.add_audit_log(
             db,
             action="report.ready",
@@ -366,9 +416,27 @@ class ProcessingPipelineService:
             incident_id=incident.id,
             details={"report_formats": ["json", "markdown"]},
         )
+        report_duration = perf_counter() - report_started
+        stage_timings["report_generation"] = report_duration
+        metrics_registry.observe("pipeline_stage_duration_seconds", report_duration, labels={"stage": "report_generation"})
 
         notify("completed")
         db.commit()
+        total_duration = perf_counter() - pipeline_started
+        metrics_registry.observe("pipeline_run_duration_seconds", total_duration, labels={"source_type": source_type})
+        log_event(
+            logger,
+            20,
+            "pipeline_completed",
+            upload_id=upload.id,
+            incident_id=incident.id,
+            source_type=source_type,
+            total_duration_seconds=round(total_duration, 4),
+            stage_timings={stage: round(duration, 4) for stage, duration in stage_timings.items()},
+            suspicious_count=len(suspicious_events),
+            final_severity=incident.severity,
+            risk_score=incident.risk_score,
+        )
         return UploadResponse(
             upload_id=upload.id,
             incident_id=incident.id,

@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     correlation_window_minutes: int = 120
     threat_intel_cache_hours: int = Field(default=24, ge=1, le=168)
     geo_velocity_window_minutes: int = Field(default=60, ge=5, le=720)
+    log_level: str = "INFO"
 
     frontend_origin: str = "http://localhost:5173"
 

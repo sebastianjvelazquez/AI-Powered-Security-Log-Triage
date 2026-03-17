@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from sqlalchemy.orm import Session
 
 from app.models.schemas import JobStatusResponse, UploadJobResponse
+from app.observability.logging import get_logger, log_event
+from app.observability.metrics import metrics_registry
 from app.repositories.incident_repository import IncidentRepository
 from app.repositories.job_repository import JobRepository
 from app.utils.upload_storage import UploadStorage
+
+logger = get_logger(__name__)
 
 
 class UploadJobService:
@@ -21,6 +27,7 @@ class UploadJobService:
         self.job_repository = job_repository or JobRepository()
 
     def stage_upload(self, db: Session, *, filename: str, source_type: str, content: bytes) -> UploadJobResponse:
+        started = perf_counter()
         storage_path = self.storage.write(filename=filename, content=content)
         upload = self.incident_repository.create_upload(
             db,
@@ -41,6 +48,20 @@ class UploadJobService:
         )
         job = self.job_repository.create_job(db, upload=upload)
         db.commit()
+        duration = perf_counter() - started
+        metrics_registry.increment("uploads_total", labels={"source_type": source_type})
+        metrics_registry.observe("upload_stage_duration_seconds", duration, labels={"source_type": source_type})
+        log_event(
+            logger,
+            20,
+            "upload_staged",
+            upload_id=upload.id,
+            job_id=job.job_id,
+            source_type=source_type,
+            filename=filename,
+            total_lines=upload.total_lines,
+            duration_seconds=round(duration, 4),
+        )
 
         return UploadJobResponse(
             upload_id=upload.id,

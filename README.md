@@ -127,6 +127,26 @@ Invalid JSON or schema mismatches are rejected. The system falls back to determi
 - Strict Pydantic validation for LLM output before rendering/storing.
 - No hardcoded secrets; environment-driven configuration.
 
+## Observability
+- Prometheus-style metrics endpoint available at `/metrics`.
+- Structured JSON logging for uploads, pipeline stage timing, task execution, and analyst workflow actions.
+- Metrics currently cover:
+  - uploads total
+  - parse failures
+  - detections fired
+  - incidents created
+  - invalid LLM responses
+  - LLM fallback count
+  - task runtimes
+  - queue depth
+  - review counts
+  - incident score distribution
+
+Example local verification:
+```bash
+curl http://localhost:8000/metrics
+```
+
 ## Local setup
 ### Backend
 ```bash
