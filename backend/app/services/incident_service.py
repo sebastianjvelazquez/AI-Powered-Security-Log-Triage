@@ -47,6 +47,21 @@ class IncidentService:
 
         history: list[IncidentHistoryItem] = []
         for incident, upload in rows:
+            latest_review = max(incident.analyst_reviews, key=lambda review: review.created_at) if incident.analyst_reviews else None
+            llm_enrichment = next(
+                (
+                    enrichment
+                    for enrichment in sorted(incident.enrichments, key=lambda item: item.created_at, reverse=True)
+                    if enrichment.enrichment_type == "llm_analysis"
+                ),
+                None,
+            )
+            analysis = LLMAnalysisOutput.model_validate(llm_enrichment.payload) if llm_enrichment else None
+            effective_mitre_techniques = (
+                latest_review.override_mitre_techniques
+                if latest_review and latest_review.override_mitre_techniques is not None
+                else (analysis.mitre_techniques if analysis else [])
+            )
             history.append(
                 IncidentHistoryItem(
                     incident_id=incident.id,
@@ -58,6 +73,8 @@ class IncidentService:
                     suspicious_count=len(incident.incident_events),
                     severity=incident.severity,
                     risk_score=incident.risk_score,
+                    mitre_techniques=effective_mitre_techniques,
+                    latest_disposition=latest_review.disposition if latest_review else None,
                     uploaded_at=upload.uploaded_at if upload else incident.created_at,
                 )
             )

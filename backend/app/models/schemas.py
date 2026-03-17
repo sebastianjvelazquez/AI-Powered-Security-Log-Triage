@@ -264,6 +264,8 @@ class IncidentHistoryItem(BaseModel):
     suspicious_count: int
     severity: str | None = None
     risk_score: float | None = None
+    mitre_techniques: list[str] = Field(default_factory=list)
+    latest_disposition: str | None = None
     uploaded_at: datetime
 
 
