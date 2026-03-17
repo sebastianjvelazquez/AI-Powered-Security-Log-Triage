@@ -4,6 +4,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 SEVERITY_LEVELS = ("Low", "Medium", "High", "Critical")
+INCIDENT_STATUS_LEVELS = ("new", "in_review", "escalated", "closed", "false_positive")
+ANALYST_DISPOSITIONS = ("true_positive", "false_positive", "benign", "needs_review", "escalated")
 
 
 class NormalizedEvent(BaseModel):
@@ -170,12 +172,51 @@ class IncidentEnrichmentView(BaseModel):
 
 
 class AnalystReviewView(BaseModel):
+    review_id: int | None = None
     reviewer: str
     disposition: str
     notes: str | None = None
     override_severity: str | None = None
     override_mitre_techniques: list[str] | None = None
     override_recommended_actions: list[str] | None = None
+    created_at: datetime
+
+
+class AnalystReviewCreateRequest(BaseModel):
+    reviewer: str = Field(min_length=3, max_length=128)
+    disposition: Literal["true_positive", "false_positive", "benign", "needs_review", "escalated"]
+    notes: str | None = Field(default=None, max_length=5000)
+    target_status: Literal["new", "in_review", "escalated", "closed", "false_positive"] | None = None
+    override_severity: Literal["Low", "Medium", "High", "Critical"] | None = None
+    override_mitre_techniques: list[str] | None = None
+    override_recommended_actions: list[str] | None = None
+
+    @field_validator("override_mitre_techniques")
+    @classmethod
+    def validate_override_mitre_ids(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        for technique in value:
+            if not technique.startswith("T"):
+                raise ValueError("MITRE technique IDs must start with 'T'")
+            if not technique[1:].replace(".", "").isdigit():
+                raise ValueError("MITRE technique format is invalid")
+        return value
+
+
+class IncidentStatusUpdateRequest(BaseModel):
+    reviewer: str = Field(min_length=3, max_length=128)
+    status: Literal["new", "in_review", "escalated", "closed", "false_positive"]
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class AuditLogView(BaseModel):
+    actor: str
+    actor_type: str
+    action: str
+    entity_type: str
+    entity_id: str
+    details: dict[str, Any] | None = None
     created_at: datetime
 
 
@@ -238,8 +279,13 @@ class IncidentDetailResponse(BaseModel):
     uploaded_at: datetime
     suspicious_events: list[SuspiciousEventOut]
     analysis: LLMAnalysisOutput | None = None
+    effective_severity: str | None = None
+    effective_mitre_techniques: list[str] = Field(default_factory=list)
+    effective_recommended_actions: list[str] = Field(default_factory=list)
+    latest_disposition: str | None = None
     score: IncidentScoreView | None = None
     correlation_summary: str | None = None
     correlation_context: dict[str, Any] | None = None
     enrichments: list[IncidentEnrichmentView] = Field(default_factory=list)
     analyst_reviews: list[AnalystReviewView] = Field(default_factory=list)
+    audit_logs: list[AuditLogView] = Field(default_factory=list)

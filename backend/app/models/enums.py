@@ -20,6 +20,14 @@ class AuditActorType(StrEnum):
     ANALYST = "analyst"
 
 
+class AnalystDisposition(StrEnum):
+    TRUE_POSITIVE = "true_positive"
+    FALSE_POSITIVE = "false_positive"
+    BENIGN = "benign"
+    NEEDS_REVIEW = "needs_review"
+    ESCALATED = "escalated"
+
+
 class IndicatorType(StrEnum):
     IP = "ip"
     DOMAIN = "domain"

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.db_models import (
     Asset,
+    AnalystReview,
     AuditLog,
     DetectionRecord,
     Incident,
@@ -24,6 +25,18 @@ from app.utils.time_utils import parse_event_timestamp
 
 
 class IncidentRepository:
+    def _incident_detail_options(self) -> tuple:
+        return (
+            joinedload(Incident.upload),
+            joinedload(Incident.upload_links).joinedload(IncidentUploadLink.upload),
+            joinedload(Incident.enrichments),
+            joinedload(Incident.scores),
+            joinedload(Incident.analyst_reviews),
+            joinedload(Incident.audit_logs),
+            joinedload(Incident.incident_events).joinedload(IncidentEventLink.normalized_event),
+            joinedload(Incident.incident_events).joinedload(IncidentEventLink.detection),
+        )
+
     def create_upload(
         self,
         db: Session,
@@ -296,12 +309,13 @@ class IncidentRepository:
         incident_id: int | None = None,
         details: dict[str, object] | None = None,
         actor: str = "system",
+        actor_type: str = AuditActorType.SYSTEM.value,
     ) -> AuditLog:
         log = AuditLog(
             upload_id=upload_id,
             incident_id=incident_id,
             actor=actor,
-            actor_type=AuditActorType.SYSTEM.value,
+            actor_type=actor_type,
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -373,18 +387,53 @@ class IncidentRepository:
             select(Incident)
             .join(IncidentUploadLink, IncidentUploadLink.incident_id == Incident.id)
             .where(IncidentUploadLink.upload_id == upload_id)
-            .options(
-                joinedload(Incident.upload),
-                joinedload(Incident.upload_links).joinedload(IncidentUploadLink.upload),
-                joinedload(Incident.enrichments),
-                joinedload(Incident.scores),
-                joinedload(Incident.analyst_reviews),
-                joinedload(Incident.incident_events)
-                .joinedload(IncidentEventLink.normalized_event),
-                joinedload(Incident.incident_events).joinedload(IncidentEventLink.detection),
-            )
+            .options(*self._incident_detail_options())
         )
         return db.scalars(stmt).unique().one_or_none()
+
+    def get_incident_by_id(self, db: Session, *, incident_id: int) -> Incident | None:
+        stmt = select(Incident).where(Incident.id == incident_id).options(*self._incident_detail_options())
+        return db.scalars(stmt).unique().one_or_none()
+
+    def create_analyst_review(
+        self,
+        db: Session,
+        *,
+        incident: Incident,
+        reviewer: str,
+        disposition: str,
+        notes: str | None = None,
+        override_severity: str | None = None,
+        override_mitre_techniques: list[str] | None = None,
+        override_recommended_actions: list[str] | None = None,
+    ) -> AnalystReview:
+        review = AnalystReview(
+            incident_id=incident.id,
+            reviewer=reviewer,
+            disposition=disposition,
+            notes=notes,
+            override_severity=override_severity,
+            override_mitre_techniques=override_mitre_techniques,
+            override_recommended_actions=override_recommended_actions,
+        )
+        db.add(review)
+        db.flush()
+        return review
+
+    def update_incident_workflow(
+        self,
+        db: Session,
+        *,
+        incident: Incident,
+        status: str | None = None,
+        severity: str | None = None,
+    ) -> Incident:
+        if status is not None:
+            incident.status = status
+        if severity is not None:
+            incident.severity = severity
+        db.flush()
+        return incident
 
     def find_recent_correlatable_incidents(self, db: Session, *, earliest_seen: datetime | None) -> list[Incident]:
         stmt = (

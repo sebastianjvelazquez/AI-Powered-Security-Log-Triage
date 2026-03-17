@@ -7,6 +7,7 @@ from app.llm.ollama_client import ResilientLLMAnalyzer
 from app.models.db_models import Incident, Upload
 from app.models.schemas import (
     AnalystReviewView,
+    AuditLogView,
     IncidentDetailResponse,
     IncidentEnrichmentView,
     IncidentHistoryItem,
@@ -66,7 +67,15 @@ class IncidentService:
         incident = self.repository.get_incident_by_upload(db, upload_id=upload_id)
         if incident is None:
             return None
+        return self._build_incident_detail(incident)
 
+    def get_incident_detail_by_id(self, db: Session, incident_id: int) -> IncidentDetailResponse | None:
+        incident = self.repository.get_incident_by_id(db, incident_id=incident_id)
+        if incident is None:
+            return None
+        return self._build_incident_detail(incident)
+
+    def _build_incident_detail(self, incident: Incident) -> IncidentDetailResponse:
         analysis = None
         enrichments: list[IncidentEnrichmentView] = []
         for enrichment in sorted(incident.enrichments, key=lambda item: item.created_at):
@@ -106,6 +115,7 @@ class IncidentService:
         ]
         analyst_reviews = [
             AnalystReviewView(
+                review_id=review.id,
                 reviewer=review.reviewer,
                 disposition=review.disposition,
                 notes=review.notes,
@@ -115,6 +125,30 @@ class IncidentService:
                 created_at=review.created_at,
             )
             for review in incident.analyst_reviews
+        ]
+        latest_review = max(incident.analyst_reviews, key=lambda review: review.created_at) if incident.analyst_reviews else None
+        effective_severity = latest_review.override_severity if latest_review and latest_review.override_severity else incident.severity
+        effective_mitre_techniques = (
+            latest_review.override_mitre_techniques
+            if latest_review and latest_review.override_mitre_techniques is not None
+            else (analysis.mitre_techniques if analysis else [])
+        )
+        effective_recommended_actions = (
+            latest_review.override_recommended_actions
+            if latest_review and latest_review.override_recommended_actions is not None
+            else (analysis.recommended_actions if analysis else [])
+        )
+        audit_logs = [
+            AuditLogView(
+                actor=log.actor,
+                actor_type=log.actor_type,
+                action=log.action,
+                entity_type=log.entity_type,
+                entity_id=log.entity_id,
+                details=log.details,
+                created_at=log.created_at,
+            )
+            for log in sorted(incident.audit_logs, key=lambda item: item.created_at)
         ]
 
         return IncidentDetailResponse(
@@ -129,9 +163,14 @@ class IncidentService:
             uploaded_at=incident.upload.uploaded_at if incident.upload else incident.created_at,
             suspicious_events=suspicious_events,
             analysis=analysis,
+            effective_severity=effective_severity,
+            effective_mitre_techniques=effective_mitre_techniques,
+            effective_recommended_actions=effective_recommended_actions,
+            latest_disposition=latest_review.disposition if latest_review else None,
             score=score,
             correlation_summary=incident.correlation_summary,
             correlation_context=incident.correlation_context,
             enrichments=enrichments,
             analyst_reviews=analyst_reviews,
+            audit_logs=audit_logs,
         )
