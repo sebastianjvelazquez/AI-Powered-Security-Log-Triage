@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.correlation.engine import correlate_incident, correlation_lookback_start
 from app.core.config import get_settings
 from app.enrichments.service import ThreatIntelEnrichmentService
-from app.llm.ollama_client import ResilientLLMAnalyzer
+from app.llm.analyzer import ResilientLLMAnalyzer
 from app.models.db_models import Upload
 from app.models.schemas import (
     DetectionCandidate,

@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.llm.ollama_client import ResilientLLMAnalyzer
+from app.llm.analyzer import ResilientLLMAnalyzer
 from app.models.db_models import Incident, Upload
 from app.models.schemas import (
     AnalystReviewView,

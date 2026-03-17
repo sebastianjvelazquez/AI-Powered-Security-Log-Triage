@@ -21,9 +21,18 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
 
+    llm_provider: str = "deterministic"
+    llm_prompt_version: str = "v3"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_timeout_seconds: int = 60
+    hosted_llm_base_url: str = ""
+    hosted_llm_endpoint: str = "/v1/triage"
+    hosted_llm_model: str = "hosted-triage-model"
+    hosted_llm_api_key: str = ""
+    hosted_llm_api_key_header: str = "Authorization"
+    hosted_llm_timeout_seconds: int = 60
+    hosted_llm_response_field: str = "response"
 
     asset_criticality: float = Field(default=1.0, ge=0.5, le=3.0)
     failed_login_threshold: int = 3

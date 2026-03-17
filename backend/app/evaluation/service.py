@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.database import Base
 from app.evaluation.models import BenchmarkCaseResult, BenchmarkDataset, BenchmarkReport, BenchmarkSummary
-from app.llm.ollama_client import ResilientLLMAnalyzer
+from app.llm.analyzer import ResilientLLMAnalyzer
 from app.models.db_models import AnalystReview, DetectionRecord, Incident, IncidentEnrichment, Upload
 from app.models.schemas import IncidentBundle, LLMAnalysisOutput, LLMAnalysisResult, LLMExecutionTrace, LLMTaskTrace, ScenarioPack
 from app.services.processing_pipeline_service import ProcessingPipelineService

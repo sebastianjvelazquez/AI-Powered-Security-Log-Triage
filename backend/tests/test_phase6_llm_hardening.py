@@ -1,4 +1,4 @@
-from app.llm.ollama_client import ResilientLLMAnalyzer
+from app.llm.analyzer import ResilientLLMAnalyzer
 from app.llm.validator import LLMValidationError
 from app.models.schemas import IncidentBundle, LLMNarrativeOutput, LLMMitreMappingOutput, SuspiciousEventOut
 
