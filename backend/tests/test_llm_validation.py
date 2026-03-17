@@ -1,6 +1,12 @@
 import pytest
 
-from app.llm.validator import LLMValidationError, validate_llm_response
+from app.llm.validator import (
+    LLMValidationError,
+    validate_classification_response,
+    validate_llm_response,
+    validate_mitre_mapping_response,
+    validate_narrative_response,
+)
 
 
 def test_validate_llm_response_valid_json() -> None:
@@ -35,3 +41,37 @@ def test_validate_llm_response_rejects_invalid_schema() -> None:
 
     with pytest.raises(LLMValidationError):
         validate_llm_response(raw)
+
+
+def test_validate_mitre_mapping_response_rejects_non_allowlisted_ids() -> None:
+    raw = """
+    {
+      "mitre_techniques": ["T9999"]
+    }
+    """
+
+    with pytest.raises(LLMValidationError):
+        validate_mitre_mapping_response(raw)
+
+
+def test_validate_task_specific_responses() -> None:
+    classification = validate_classification_response(
+        """
+        {
+          "attack_type": "Credential Access Attempt",
+          "confidence_score": 73
+        }
+        """
+    )
+    narrative = validate_narrative_response(
+        """
+        {
+          "analysis_summary": "Correlated authentication failures indicate likely credential abuse activity requiring analyst review.",
+          "recommended_actions": ["Reset targeted credentials", "Review source IP activity"]
+        }
+        """
+    )
+
+    assert classification.attack_type == "Credential Access Attempt"
+    assert classification.confidence_score == 73
+    assert len(narrative.recommended_actions) == 2

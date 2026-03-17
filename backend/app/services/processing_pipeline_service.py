@@ -13,6 +13,8 @@ from app.models.schemas import (
     DetectionCandidate,
     IncidentBundle,
     LLMAnalysisOutput,
+    LLMExecutionTrace,
+    LLMTaskTrace,
     SuspiciousEventOut,
     UploadResponse,
 )
@@ -49,6 +51,42 @@ def _pick_time_bounds(values: Iterable) -> tuple[object | None, object | None]:
 def _non_null_values(*values: object | None) -> list[object]:
     filtered = [value for value in values if value is not None]
     return filtered
+
+
+def _default_llm_trace(bundle: IncidentBundle, analysis: LLMAnalysisOutput) -> LLMExecutionTrace:
+    return LLMExecutionTrace(
+        provider="stub",
+        model="test-double",
+        prompt_version="legacy",
+        used_fallback=False,
+        fallback_reason=None,
+        sanitized_bundle={
+            "source_type": bundle.source_type,
+            "detection_summary": bundle.detection_summary,
+            "suspicious_events": [
+                {
+                    "timestamp": event.timestamp,
+                    "source_ip": event.source_ip,
+                    "destination_ip": event.destination_ip,
+                    "user": event.user,
+                    "event_type": event.event_type,
+                    "status": event.status,
+                    "rule_name": event.rule_name,
+                    "reason": event.reason,
+                    "risk_weight": event.risk_weight,
+                }
+                for event in bundle.suspicious_events
+            ],
+        },
+        tasks=[
+            LLMTaskTrace(
+                task_name="legacy_analysis",
+                prompt_name="legacy",
+                raw_response=analysis.model_dump_json(),
+                used_fallback=False,
+            )
+        ],
+    )
 
 
 class ProcessingPipelineService:
@@ -148,7 +186,13 @@ class ProcessingPipelineService:
                 suspicious_events=suspicious_events,
                 detection_summary=detection_summary,
             )
-            llm_output = self.llm_analyzer.analyze_with_fallback(bundle)
+            llm_result = self.llm_analyzer.analyze_with_fallback(bundle)
+            if isinstance(llm_result, LLMAnalysisOutput):
+                llm_output = llm_result
+                llm_trace = _default_llm_trace(bundle, llm_output)
+            else:
+                llm_output = llm_result.analysis
+                llm_trace = llm_result.trace
             initial_score = build_incident_score(
                 rule_weights=[event.risk_weight for event in suspicious_events],
                 llm_analysis=llm_output,
@@ -164,6 +208,15 @@ class ProcessingPipelineService:
         else:
             risk_score = 0.0
             final_severity = "Low"
+            llm_trace = LLMExecutionTrace(
+                provider="deterministic",
+                model="fallback",
+                prompt_version="none",
+                used_fallback=True,
+                fallback_reason="No suspicious events were available for LLM enrichment.",
+                sanitized_bundle={},
+                tasks=[],
+            )
             llm_analysis_for_response = LLMAnalysisOutput(
                 severity=final_severity,
                 attack_type="No actionable suspicious activity detected",
@@ -249,6 +302,15 @@ class ProcessingPipelineService:
             payload=threat_intel_payload.model_dump(mode="json"),
         )
         self.repository.add_llm_enrichment(db, incident=incident, analysis=llm_analysis_for_response)
+        self.repository.add_incident_enrichment(
+            db,
+            incident=incident,
+            enrichment_type="llm_execution_trace",
+            provider=llm_trace.provider,
+            status="ready",
+            summary="LLM execution trace with task-level validation and fallback metadata.",
+            payload=llm_trace.model_dump(mode="json"),
+        )
 
         notify("scoring")
         correlation_strength = int(correlation_decision.context.get("score", 0)) if correlation_decision.context else 0

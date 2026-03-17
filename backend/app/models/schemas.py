@@ -61,6 +61,53 @@ class LLMAnalysisOutput(BaseModel):
         return value
 
 
+class LLMClassificationOutput(BaseModel):
+    attack_type: str = Field(min_length=3, max_length=128)
+    confidence_score: int = Field(ge=0, le=100)
+
+
+class LLMMitreMappingOutput(BaseModel):
+    mitre_techniques: list[str] = Field(min_length=1)
+
+    @field_validator("mitre_techniques")
+    @classmethod
+    def validate_mitre_ids(cls, value: list[str]) -> list[str]:
+        for technique in value:
+            if not technique.startswith("T"):
+                raise ValueError("MITRE technique IDs must start with 'T'")
+            if not technique[1:].replace(".", "").isdigit():
+                raise ValueError("MITRE technique format is invalid")
+        return value
+
+
+class LLMNarrativeOutput(BaseModel):
+    analysis_summary: str = Field(min_length=20, max_length=5000)
+    recommended_actions: list[str] = Field(min_length=1)
+
+
+class LLMTaskTrace(BaseModel):
+    task_name: str
+    prompt_name: str
+    raw_response: str | None = None
+    used_fallback: bool = False
+    validation_error: str | None = None
+
+
+class LLMExecutionTrace(BaseModel):
+    provider: str
+    model: str
+    prompt_version: str
+    used_fallback: bool
+    fallback_reason: str | None = None
+    sanitized_bundle: dict[str, Any]
+    tasks: list[LLMTaskTrace]
+
+
+class LLMAnalysisResult(BaseModel):
+    analysis: LLMAnalysisOutput
+    trace: LLMExecutionTrace
+
+
 class IncidentScoreBreakdown(BaseModel):
     component: str
     score: float
