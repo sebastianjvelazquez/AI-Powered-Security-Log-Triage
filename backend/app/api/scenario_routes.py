@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_role
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.rate_limit import enforce_rate_limit
+from app.models.enums import UserRole
 from app.models.schemas import ScenarioDetailResponse, ScenarioReplayResponse, ScenarioSummaryResponse
 from app.repositories.job_repository import JobRepository
 from app.services.scenario_replay_service import ScenarioNotFoundError, ScenarioReplayService
@@ -19,12 +22,19 @@ scenario_service = ScenarioReplayService(
 
 
 @router.get("", response_model=list[ScenarioSummaryResponse])
-def list_scenarios() -> list[ScenarioSummaryResponse]:
+def list_scenarios(
+    _: None = Depends(enforce_rate_limit("read")),
+    __= Depends(require_role(UserRole.VIEWER)),
+) -> list[ScenarioSummaryResponse]:
     return scenario_service.list_scenarios()
 
 
 @router.get("/{scenario_id}", response_model=ScenarioDetailResponse)
-def get_scenario(scenario_id: str) -> ScenarioDetailResponse:
+def get_scenario(
+    scenario_id: str,
+    _: None = Depends(enforce_rate_limit("read")),
+    __= Depends(require_role(UserRole.VIEWER)),
+) -> ScenarioDetailResponse:
     try:
         return scenario_service.get_scenario(scenario_id)
     except ScenarioNotFoundError as exc:
@@ -32,7 +42,12 @@ def get_scenario(scenario_id: str) -> ScenarioDetailResponse:
 
 
 @router.post("/{scenario_id}/replay", response_model=ScenarioReplayResponse)
-def replay_scenario(scenario_id: str, db: Session = Depends(get_db)) -> ScenarioReplayResponse:
+def replay_scenario(
+    scenario_id: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(enforce_rate_limit("upload")),
+    __= Depends(require_role(UserRole.ANALYST)),
+) -> ScenarioReplayResponse:
     try:
         replay_response = scenario_service.replay_scenario(db, scenario_id=scenario_id)
     except ScenarioNotFoundError as exc:

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from app.models.db_models import Incident, ProcessingJob, Upload
 from app.models.enums import JobStatus, ProcessingStage
 from app.repositories.incident_repository import IncidentRepository
@@ -24,9 +26,13 @@ def test_processing_pipeline_runs_stage_sequence_for_existing_upload(db_session)
         db_session,
         filename="auth.log",
         source_type="auth",
+        sha256="c" * 64,
+        mime_type="text/plain",
         total_lines=3,
         normalized_event_count=0,
         processing_status="uploaded",
+        pii_redacted=False,
+        retention_expires_at=datetime.utcnow() + timedelta(days=30),
     )
     job_repository = JobRepository()
     job = job_repository.create_job(db_session, upload=upload)

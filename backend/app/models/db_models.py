@@ -15,10 +15,14 @@ class Upload(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     source_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
     storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     processing_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=ProcessingStage.COMPLETED.value, index=True
     )
+    pii_redacted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    retention_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_lines: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     normalized_event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

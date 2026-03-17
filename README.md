@@ -120,6 +120,13 @@ Invalid JSON or schema mismatches are rejected. The system falls back to determi
 
 ## Security controls implemented
 - Upload extension allowlist and file-size limits.
+- MIME-type validation with text-only content sniffing.
+- SHA-256 hashing of uploaded artifacts.
+- Configurable upload retention metadata for cleanup workflows.
+- Bearer-token authentication with role-based access control for `viewer`, `analyst`, and `admin`.
+- In-memory rate limiting for read, upload, and review actions.
+- Optional deterministic PII redaction mode for uploaded log content.
+- Startup configuration validation for auth and redaction settings.
 - Safe decoding and malformed-line handling.
 - No execution of uploaded content.
 - Parser and detection logic are deterministic.
@@ -144,7 +151,7 @@ Invalid JSON or schema mismatches are rejected. The system falls back to determi
 
 Example local verification:
 ```bash
-curl http://localhost:8000/metrics
+curl -H "Authorization: Bearer admin-dev-token-change-me" http://localhost:8000/metrics
 ```
 
 ## Local setup
@@ -155,6 +162,8 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
+python -m alembic -c alembic.ini upgrade head
+# Set VIEWER_API_TOKEN, ANALYST_API_TOKEN, and ADMIN_API_TOKEN before exposing the app beyond local dev.
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -163,6 +172,7 @@ uvicorn app.main:app --reload --port 8000
 cd /Users/sjv/Developer/AI-Powered-Security-Log-Triage/frontend
 npm install
 cp .env.example .env
+# VITE_API_TOKEN defaults to the analyst demo token in the example env.
 npm run dev
 ```
 

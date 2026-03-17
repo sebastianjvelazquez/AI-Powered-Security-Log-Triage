@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from datetime import datetime
 from time import perf_counter
 
 from sqlalchemy.orm import Session
@@ -111,6 +112,10 @@ class ProcessingPipelineService:
         filename: str,
         source_type: str,
         content: str,
+        sha256: str,
+        mime_type: str,
+        pii_redacted: bool,
+        retention_expires_at: datetime,
         storage_path: str | None = None,
         on_stage_change: StageCallback | None = None,
     ) -> UploadResponse:
@@ -118,10 +123,14 @@ class ProcessingPipelineService:
             db,
             filename=filename,
             source_type=source_type,
+            sha256=sha256,
+            mime_type=mime_type,
             total_lines=len(content.splitlines()),
             normalized_event_count=0,
             storage_path=storage_path,
             processing_status="uploaded",
+            pii_redacted=pii_redacted,
+            retention_expires_at=retention_expires_at,
         )
         self.repository.add_audit_log(
             db,
@@ -129,7 +138,13 @@ class ProcessingPipelineService:
             entity_type="upload",
             entity_id=str(upload.id),
             upload_id=upload.id,
-            details={"filename": filename, "source_type": source_type},
+            details={
+                "filename": filename,
+                "source_type": source_type,
+                "sha256": sha256,
+                "mime_type": mime_type,
+                "pii_redacted": pii_redacted,
+            },
         )
         return self.process_existing_upload(
             db,

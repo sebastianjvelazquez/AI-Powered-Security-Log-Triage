@@ -1,7 +1,20 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+const API_TOKEN = import.meta.env.VITE_API_TOKEN || "analyst-dev-token-change-me";
+
+function buildHeaders(headers = {}) {
+  return API_TOKEN
+    ? {
+        ...headers,
+        Authorization: `Bearer ${API_TOKEN}`
+      }
+    : headers;
+}
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, {
+    ...options,
+    headers: buildHeaders(options.headers)
+  });
   if (!response.ok) {
     const error = await safeError(response);
     throw new Error(error);
@@ -67,6 +80,27 @@ export function getJsonReportUrl(uploadId) {
 
 export function getMarkdownReportUrl(uploadId) {
   return `${API_BASE}/incidents/${uploadId}/report/markdown`;
+}
+
+export async function downloadIncidentReport(uploadId, format) {
+  const response = await fetch(`${API_BASE}/incidents/${uploadId}/report/${format}`, {
+    headers: buildHeaders()
+  });
+  if (!response.ok) {
+    const error = await safeError(response);
+    throw new Error(error);
+  }
+
+  const blob = await response.blob();
+  const extension = format === "json" ? "json" : "md";
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `incident-report-${uploadId}.${extension}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function safeError(response) {

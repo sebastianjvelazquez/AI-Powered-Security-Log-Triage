@@ -308,6 +308,11 @@ class JobStatusResponse(BaseModel):
     completed_at: datetime | None = None
 
 
+class AuthenticatedUserResponse(BaseModel):
+    username: str
+    role: str
+
+
 class IncidentHistoryItem(BaseModel):
     incident_id: int
     upload_id: int | None = None

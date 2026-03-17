@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -33,12 +35,27 @@ class IncidentService:
             repository=self.repository,
         )
 
-    def process_upload(self, db: Session, *, filename: str, source_type: str, content: str) -> UploadResponse:
+    def process_upload(
+        self,
+        db: Session,
+        *,
+        filename: str,
+        source_type: str,
+        content: str,
+        sha256: str,
+        mime_type: str,
+        pii_redacted: bool,
+        retention_expires_at: datetime,
+    ) -> UploadResponse:
         return self.pipeline_service.process_new_upload(
             db,
             filename=filename,
             source_type=source_type,
             content=content,
+            sha256=sha256,
+            mime_type=mime_type,
+            pii_redacted=pii_redacted,
+            retention_expires_at=retention_expires_at,
         )
 
     def get_history(self, db: Session) -> list[IncidentHistoryItem]:

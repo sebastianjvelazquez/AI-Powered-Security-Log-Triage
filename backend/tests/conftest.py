@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.database import Base
 from app.models import db_models  # noqa: F401
+from app.core.rate_limit import rate_limiter
 from app.observability.metrics import metrics_registry
 
 
@@ -26,7 +27,9 @@ def db_session() -> Generator[Session, None, None]:
 @pytest.fixture(autouse=True)
 def reset_metrics_registry() -> Generator[None, None, None]:
     metrics_registry.reset()
+    rate_limiter.reset()
     try:
         yield
     finally:
         metrics_registry.reset()
+        rate_limiter.reset()

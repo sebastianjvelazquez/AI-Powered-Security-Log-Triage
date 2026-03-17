@@ -1,4 +1,4 @@
-import { getJsonReportUrl, getMarkdownReportUrl } from "../api";
+import { downloadIncidentReport } from "../api";
 import SeverityBadge from "./SeverityBadge";
 import ScoreBreakdownCard from "./ScoreBreakdownCard";
 
@@ -70,12 +70,12 @@ export default function IncidentDetailPanel({ incident }) {
           <div className="report-buttons">
             {reportUploadId ? (
               <>
-                <a href={getJsonReportUrl(reportUploadId)} target="_blank" rel="noreferrer">
+                <button type="button" onClick={() => downloadIncidentReport(reportUploadId, "json")}>
                   Download JSON
-                </a>
-                <a href={getMarkdownReportUrl(reportUploadId)} target="_blank" rel="noreferrer">
+                </button>
+                <button type="button" onClick={() => downloadIncidentReport(reportUploadId, "markdown")}>
                   Download Markdown
-                </a>
+                </button>
               </>
             ) : (
               <span className="muted-copy">Reports are available on the primary upload artifact.</span>

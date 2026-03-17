@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_role
 from app.core.database import get_db
+from app.core.rate_limit import enforce_rate_limit
+from app.models.enums import UserRole
 from app.models.schemas import AnalystReviewCreateRequest, IncidentDetailResponse, IncidentStatusUpdateRequest
 from app.services.analyst_workflow_service import AnalystWorkflowService, InvalidIncidentTransitionError
 
@@ -14,6 +17,8 @@ def submit_incident_review(
     incident_id: int,
     review_request: AnalystReviewCreateRequest,
     db: Session = Depends(get_db),
+    _: None = Depends(enforce_rate_limit("review")),
+    __= Depends(require_role(UserRole.ANALYST)),
 ) -> IncidentDetailResponse:
     try:
         detail = workflow_service.submit_review(
@@ -34,6 +39,8 @@ def update_incident_status(
     incident_id: int,
     status_request: IncidentStatusUpdateRequest,
     db: Session = Depends(get_db),
+    _: None = Depends(enforce_rate_limit("review")),
+    __= Depends(require_role(UserRole.ANALYST)),
 ) -> IncidentDetailResponse:
     try:
         detail = workflow_service.update_status(

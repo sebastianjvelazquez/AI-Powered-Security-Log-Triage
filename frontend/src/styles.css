@@ -407,7 +407,7 @@ textarea {
   margin-top: 16px;
 }
 
-.report-buttons a,
+.report-buttons button,
 .primary-button,
 .ghost-button {
   border-radius: 14px;
@@ -424,7 +424,7 @@ textarea {
   font-weight: 800;
 }
 
-.report-buttons a,
+.report-buttons button,
 .ghost-button {
   color: var(--text);
   background: rgba(168, 190, 216, 0.09);
@@ -433,7 +433,7 @@ textarea {
 
 .primary-button:hover,
 .ghost-button:hover,
-.report-buttons a:hover {
+.report-buttons button:hover {
   transform: translateY(-1px);
 }
 

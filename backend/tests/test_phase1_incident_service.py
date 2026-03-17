@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from app.models.db_models import AuditLog, DetectionRecord, IOCache, Incident, IncidentEnrichment, IncidentScore, NormalizedEventRecord, Upload
 from app.models.schemas import LLMAnalysisOutput
 from app.services.incident_service import IncidentService
@@ -25,7 +27,16 @@ def test_process_upload_persists_incident_graph(db_session) -> None:
         ]
     )
 
-    response = service.process_upload(db_session, filename="auth.log", source_type="auth", content=content)
+    response = service.process_upload(
+        db_session,
+        filename="auth.log",
+        source_type="auth",
+        content=content,
+        sha256="a" * 64,
+        mime_type="text/plain",
+        pii_redacted=False,
+        retention_expires_at=datetime.utcnow() + timedelta(days=30),
+    )
 
     assert response.upload_id > 0
     assert response.incident_id > 0
@@ -46,7 +57,16 @@ def test_process_upload_without_detections_still_creates_low_incident(db_session
     service = IncidentService(llm_analyzer=StubAnalyzer())
     content = "2026-02-22T10:02:13Z host sshd[1245]: Accepted password for root from 10.0.0.10 port 50123 ssh2"
 
-    response = service.process_upload(db_session, filename="clean.log", source_type="auth", content=content)
+    response = service.process_upload(
+        db_session,
+        filename="clean.log",
+        source_type="auth",
+        content=content,
+        sha256="b" * 64,
+        mime_type="text/plain",
+        pii_redacted=False,
+        retention_expires_at=datetime.utcnow() + timedelta(days=30),
+    )
 
     assert response.severity == "Low"
     assert response.suspicious_count == 0

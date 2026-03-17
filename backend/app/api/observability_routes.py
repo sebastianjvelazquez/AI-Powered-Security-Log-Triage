@@ -3,7 +3,9 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_role
 from app.core.database import get_db
+from app.models.enums import UserRole
 from app.models.db_models import ProcessingJob
 from app.models.enums import JobStatus
 from app.observability.metrics import metrics_registry
@@ -12,7 +14,10 @@ router = APIRouter(tags=["observability"])
 
 
 @router.get("/metrics", response_class=PlainTextResponse)
-def get_metrics(db: Session = Depends(get_db)) -> PlainTextResponse:
+def get_metrics(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_role(UserRole.ADMIN)),
+) -> PlainTextResponse:
     queued = db.scalar(select(func.count()).select_from(ProcessingJob).where(ProcessingJob.status == JobStatus.QUEUED.value)) or 0
     running = db.scalar(select(func.count()).select_from(ProcessingJob).where(ProcessingJob.status == JobStatus.RUNNING.value)) or 0
     metrics_registry.set_gauge("queue_depth", float(queued), labels={"status": "queued"})

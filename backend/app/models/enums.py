@@ -20,6 +20,12 @@ class AuditActorType(StrEnum):
     ANALYST = "analyst"
 
 
+class UserRole(StrEnum):
+    VIEWER = "viewer"
+    ANALYST = "analyst"
+    ADMIN = "admin"
+
+
 class AnalystDisposition(StrEnum):
     TRUE_POSITIVE = "true_positive"
     FALSE_POSITIVE = "false_positive"
