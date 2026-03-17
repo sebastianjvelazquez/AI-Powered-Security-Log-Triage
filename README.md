@@ -1,10 +1,11 @@
 # AI-Powered Security Log Triage & Incident Prioritization Engine
 
-Production-oriented SOC automation platform that combines deterministic detection logic with local LLM triage (Ollama + Llama 3.1 8B) to prioritize incidents, map MITRE ATT&CK techniques, and generate analyst-ready reports.
+Production-oriented SOC automation platform built around deterministic detection, local-first AI enrichment, and provider-agnostic inference. The system prioritizes incidents, maps MITRE ATT&CK techniques, and generates analyst-ready reports while keeping AI as a bounded enrichment layer rather than the decision-maker.
 
 ## Why this project
 - Demonstrates security engineering depth beyond a generic AI wrapper.
-- Uses deterministic parsing and rule-based detection before AI enrichment.
+- Uses deterministic parsing and rule-based detection before any AI enrichment.
+- Preserves a local-first architecture while supporting optional hosted inference fallback for constrained hardware and easier demos.
 - Enforces strict LLM JSON schema validation for safe downstream use.
 - Supports risk-based prioritization using rule weights + confidence + asset criticality.
 
@@ -20,8 +21,11 @@ AI-Powered-Security-Log-Triage/
 │   │   │   ├── database.py
 │   │   │   └── security.py
 │   │   ├── llm/
+│   │   │   ├── analyzer.py
+│   │   │   ├── factory.py
 │   │   │   ├── ollama_client.py
-│   │   │   ├── prompt_template.md
+│   │   │   ├── providers.py
+│   │   │   ├── prompts/
 │   │   │   └── validator.py
 │   │   ├── models/
 │   │   │   ├── db_models.py
@@ -61,48 +65,49 @@ AI-Powered-Security-Log-Triage/
 
 ## Architecture
 ```text
-                    +-----------------------------+
-                    |        React Dashboard      |
-                    | Upload | Severity | Reports |
-                    +-------------+---------------+
-                                  |
-                                  v
-+--------------------------+   FastAPI API   +------------------------------+
-| File Validation Layer    +---------------->+ Incident Orchestration       |
-| extension, size, decode  |                 | parse -> detect -> LLM -> DB |
-+--------------------------+                 +------------------------------+
-          |                                                  |
-          v                                                  v
-+---------------------------+                    +---------------------------+
-| Log Normalization         |                    | Risk Scoring Engine       |
-| auth/firewall/windows/    |                    | rule weights + confidence |
-| cloud deterministic parse |                    | + asset criticality       |
-+---------------------------+                    +---------------------------+
-          |                                                  |
-          v                                                  v
-+---------------------------+                    +---------------------------+
-| Rule-based Detection      |                    | Ollama (Local LLM)        |
-| failed logins, priv esc,  |------------------->| structured incident bundle |
-| suspicious IP, port scan  |  validated JSON    | strict output schema       |
-+---------------------------+                    +---------------------------+
-          |
-          v
-+---------------------------+
-| PostgreSQL / SQLite       |
-| logs, suspicious events,  |
-| AI analysis, timestamps   |
-+---------------------------+
++---------------------------+      +-------------------------------+
+| React SOC Workspace       |----->| FastAPI Incident API          |
+| queue | timeline | review |      | uploads | workflow | reports  |
++---------------------------+      +-------------------------------+
+                                                 |
+                                                 v
+                                   +-------------------------------+
+                                   | Deterministic Pipeline        |
+                                   | parse -> detect -> correlate  |
+                                   | -> enrich -> score            |
+                                   +-------------------------------+
+                                                 |
+                            sanitized incident bundle only
+                                                 |
+                                                 v
+                       +-----------------------------------------------+
+                       | Provider-Agnostic AI Enrichment Layer         |
+                       | local Ollama | hosted API | deterministic-only|
+                       | strict JSON validation + per-task fallbacks   |
+                       +-----------------------------------------------+
+                                                 |
+                                                 v
+                                   +-------------------------------+
+                                   | PostgreSQL / SQLite           |
+                                   | incidents, evidence, scores,  |
+                                   | enrichments, audit trail      |
+                                   +-------------------------------+
 ```
 
 ## Core workflow
 1. Upload security log (`auth`, `firewall`, `windows`, `cloud`).
 2. Deterministic parser normalizes events to structured JSON.
 3. Rule engine flags suspicious events and generates an `IncidentBundle`.
-4. Only structured bundle is sent to Ollama (no raw logs sent to LLM).
-5. LLM response is schema-validated with Pydantic.
-6. Risk score is computed and final severity is assigned.
-7. Dashboard displays triage output and MITRE mapping.
-8. Incident report can be exported as JSON or Markdown.
+4. Only the sanitized structured bundle is sent to the AI enrichment layer. Raw logs are never sent to any provider.
+5. AI enrichment runs in one of three modes:
+   - local Ollama
+   - hosted API provider
+   - deterministic-only mode
+6. Every AI task response is schema-validated with Pydantic and allowlisted where required.
+7. If AI is unavailable or invalid, deterministic fallback analysis is used automatically.
+8. Risk score is computed and final severity is assigned by backend logic.
+9. Dashboard displays triage output and MITRE mapping.
+10. Incident report can be exported as JSON or Markdown.
 
 ## LLM output contract (strict)
 Expected model JSON:
@@ -116,7 +121,17 @@ Expected model JSON:
   "recommended_actions": ["string"]
 }
 ```
-Invalid JSON or schema mismatches are rejected. The system falls back to deterministic analysis when needed.
+Invalid JSON or schema mismatches are rejected. The system falls back to deterministic analysis when needed, and can also run in deterministic-only mode by configuration.
+
+## AI enrichment modes
+- `LLM_PROVIDER=ollama`
+  - local-first mode for workstation or lab deployments using Ollama
+- `LLM_PROVIDER=hosted`
+  - provider-agnostic hosted inference mode for lower-spec machines, demos, or portability
+- `LLM_PROVIDER=deterministic`
+  - no LLM execution; deterministic fallback enrichment only
+- `LLM_PROVIDER=mock`
+  - local development and test helper mode that returns valid structured responses without external inference
 
 ## Security controls implemented
 - Upload extension allowlist and file-size limits.
@@ -131,6 +146,7 @@ Invalid JSON or schema mismatches are rejected. The system falls back to determi
 - No execution of uploaded content.
 - Parser and detection logic are deterministic.
 - Prompt-injection resistance by passing only sanitized structured fields to LLM.
+- Provider abstraction keeps inference transport swappable without changing scoring or detection logic.
 - Strict Pydantic validation for LLM output before rendering/storing.
 - No hardcoded secrets; environment-driven configuration.
 
@@ -164,6 +180,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 python -m alembic -c alembic.ini upgrade head
 # Set VIEWER_API_TOKEN, ANALYST_API_TOKEN, and ADMIN_API_TOKEN before exposing the app beyond local dev.
+# Choose LLM_PROVIDER=ollama, hosted, deterministic, or mock.
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -182,16 +199,37 @@ cd /Users/sjv/Developer/AI-Powered-Security-Log-Triage/backend
 pytest
 ```
 
-## Ollama integration
+## AI provider configuration
+### Local mode (Ollama)
 1. Install Ollama locally.
 2. Pull model:
 ```bash
 ollama pull llama3.1:8b
 ```
-3. Start Ollama service and keep default `OLLAMA_BASE_URL=http://localhost:11434`.
-4. Backend sends structured bundle to `/api/generate` and validates JSON response.
+3. Set `LLM_PROVIDER=ollama`.
+4. Start Ollama service and keep default `OLLAMA_BASE_URL=http://localhost:11434`.
 
-Prompt template: `/Users/sjv/Developer/AI-Powered-Security-Log-Triage/backend/app/llm/prompt_template.md`
+### Hosted mode
+Set:
+```env
+LLM_PROVIDER="hosted"
+HOSTED_LLM_BASE_URL="https://your-provider.example"
+HOSTED_LLM_ENDPOINT="/v1/triage"
+HOSTED_LLM_MODEL="your-model"
+HOSTED_LLM_API_KEY="your-api-key"
+HOSTED_LLM_RESPONSE_FIELD="response"
+```
+
+### Deterministic-only mode
+Set:
+```env
+LLM_PROVIDER="deterministic"
+```
+
+Prompt templates live in:
+- `/Users/sjv/Developer/AI-Powered-Security-Log-Triage/backend/app/llm/prompts/attack_classification.md`
+- `/Users/sjv/Developer/AI-Powered-Security-Log-Triage/backend/app/llm/prompts/mitre_mapping.md`
+- `/Users/sjv/Developer/AI-Powered-Security-Log-Triage/backend/app/llm/prompts/analyst_summary.md`
 
 ## Docker usage (optional)
 ```bash
@@ -238,7 +276,7 @@ See `/Users/sjv/Developer/AI-Powered-Security-Log-Triage/docs/mitre_mapping_refe
 
 ## Resume-ready bullets
 - Built a full-stack SOC triage platform using FastAPI + React that normalizes heterogeneous security logs and prioritizes incidents with deterministic detection rules.
-- Implemented local LLM enrichment (Ollama / Llama 3.1 8B) with strict JSON schema validation, preventing malformed AI output from entering analyst workflows.
+- Implemented provider-agnostic AI enrichment with local Ollama, hosted API, mock, and deterministic-only modes, while keeping raw logs out of the model boundary.
 - Developed risk-based incident scoring combining rule severity, AI confidence, and asset criticality to drive Low/Medium/High/Critical prioritization.
 - Integrated MITRE ATT&CK technique mapping and generated analyst-ready JSON/Markdown incident reports for repeatable investigative handoff.
 - Added unit tests for parser correctness, suspicious event detection logic, and LLM output contract validation to support production reliability.

@@ -43,6 +43,18 @@ def test_validate_startup_configuration_rejects_duplicate_tokens() -> None:
         validate_startup_configuration(settings)
 
 
+def test_validate_startup_configuration_requires_hosted_base_url() -> None:
+    settings = Settings(
+        llm_provider="hosted",
+        hosted_llm_base_url="",
+        hosted_llm_endpoint="/v1/triage",
+        hosted_llm_response_field="response",
+    )
+
+    with pytest.raises(RuntimeError, match="HOSTED_LLM_BASE_URL"):
+        validate_startup_configuration(settings)
+
+
 def test_rate_limiter_blocks_excess_requests() -> None:
     rule = RateLimitRule(action="read", limit=1, window_seconds=60)
 
