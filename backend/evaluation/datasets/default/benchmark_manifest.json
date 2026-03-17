@@ -1,0 +1,37 @@
+{
+  "dataset_id": "default_scenario_benchmark",
+  "name": "Default Scenario Benchmark Dataset",
+  "description": "Portfolio benchmark dataset built from the bundled replay scenarios.",
+  "cases": [
+    {
+      "scenario_id": "password_spray",
+      "expected_severity": "Medium",
+      "benign_expected": false
+    },
+    {
+      "scenario_id": "recon_auth_abuse",
+      "expected_severity": "Critical",
+      "benign_expected": false
+    },
+    {
+      "scenario_id": "privilege_escalation_chain",
+      "expected_severity": "High",
+      "benign_expected": false
+    },
+    {
+      "scenario_id": "suspicious_cloud_login",
+      "expected_severity": "High",
+      "benign_expected": false
+    },
+    {
+      "scenario_id": "mixed_attack_chain",
+      "expected_severity": "Critical",
+      "benign_expected": false
+    },
+    {
+      "scenario_id": "benign_admin_noise",
+      "expected_severity": "Low",
+      "benign_expected": true
+    }
+  ]
+}

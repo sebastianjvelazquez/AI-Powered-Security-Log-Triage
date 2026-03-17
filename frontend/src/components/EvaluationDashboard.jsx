@@ -91,6 +91,27 @@ export default function EvaluationDashboard({ items }) {
             )}
           </div>
         </section>
+
+        <section className="workspace-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Benchmark Runner</p>
+              <h2>Local Evaluation Path</h2>
+            </div>
+          </div>
+          <div className="mini-card">
+            <strong>Dataset</strong>
+            <p><code>backend/evaluation/datasets/default/benchmark_manifest.json</code></p>
+          </div>
+          <div className="mini-card">
+            <strong>Command</strong>
+            <p><code>python3 backend/scripts/run_benchmark.py --dataset backend/evaluation/datasets/default/benchmark_manifest.json</code></p>
+          </div>
+          <div className="mini-card">
+            <strong>Reports</strong>
+            <p><code>backend/evaluation/reports/</code> will receive JSON and Markdown summaries.</p>
+          </div>
+        </section>
       </div>
     </section>
   );
