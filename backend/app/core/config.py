@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     failed_login_threshold: int = 3
     port_scan_threshold: int = 5
     correlation_window_minutes: int = 120
+    threat_intel_cache_hours: int = Field(default=24, ge=1, le=168)
+    geo_velocity_window_minutes: int = Field(default=60, ge=5, le=720)
 
     frontend_origin: str = "http://localhost:5173"
 

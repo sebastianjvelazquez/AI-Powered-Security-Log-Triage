@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from app.models.schemas import IncidentDetailResponse
+from app.models.schemas import IncidentDetailResponse, ThreatIntelEnrichmentPayload
 
 
 def build_report_json(detail: IncidentDetailResponse) -> dict:
@@ -75,6 +75,36 @@ def build_report_markdown(detail: IncidentDetailResponse) -> str:
         lines.append("### Components")
         for component in score.breakdown:
             lines.append(f"- {component.component}: {component.score}/{component.max_score} ({component.rationale})")
+
+    threat_intel_enrichment = next(
+        (item for item in detail.enrichments if item.enrichment_type == "threat_intel"),
+        None,
+    )
+    if threat_intel_enrichment is not None:
+        threat_intel = ThreatIntelEnrichmentPayload.model_validate(threat_intel_enrichment.payload)
+        lines.extend(
+            [
+                "",
+                "## Threat Intel Enrichment",
+                "",
+                f"- Provider: {threat_intel.provider}",
+                f"- Indicators Evaluated: {threat_intel.summary.indicators_evaluated}",
+                f"- Malicious Indicators: {threat_intel.summary.malicious_indicator_count}",
+                f"- TOR/VPN Flags: {threat_intel.summary.tor_vpn_count}",
+                f"- Highest Reputation Score: {threat_intel.summary.highest_reputation_score}",
+            ]
+        )
+        if threat_intel.summary.anomaly_flags:
+            lines.append(f"- Anomaly Flags: {', '.join(threat_intel.summary.anomaly_flags)}")
+
+        lines.append("")
+        lines.append("### Indicators")
+        for indicator in threat_intel.indicators:
+            lines.append(
+                f"- {indicator.indicator}: scope={indicator.network_scope}, country={indicator.country or 'N/A'}, "
+                f"asn={indicator.asn or 'N/A'}, reputation={indicator.reputation_score}, "
+                f"malicious={indicator.is_malicious}, tor_vpn={indicator.tor_vpn}"
+            )
 
     lines.extend(["", "## Suspicious Events"])
     for idx, event in enumerate(detail.suspicious_events, start=1):

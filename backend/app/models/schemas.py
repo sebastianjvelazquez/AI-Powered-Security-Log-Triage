@@ -83,6 +83,36 @@ class IncidentScoreView(BaseModel):
     summary: IncidentScoreSummary
 
 
+class ThreatIntelIndicator(BaseModel):
+    indicator: str
+    indicator_type: Literal["ip"] = "ip"
+    network_scope: str
+    is_private: bool
+    country: str | None = None
+    asn: str | None = None
+    reputation_score: float = Field(ge=0, le=100)
+    is_malicious: bool = False
+    tor_vpn: bool = False
+    known_indicator: bool = False
+    anomaly_flags: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+
+class ThreatIntelEnrichmentSummary(BaseModel):
+    indicators_evaluated: int
+    public_ip_count: int
+    malicious_indicator_count: int
+    tor_vpn_count: int
+    highest_reputation_score: float = Field(ge=0, le=100)
+    anomaly_flags: list[str] = Field(default_factory=list)
+
+
+class ThreatIntelEnrichmentPayload(BaseModel):
+    provider: str
+    indicators: list[ThreatIntelIndicator]
+    summary: ThreatIntelEnrichmentSummary
+
+
 class IncidentEnrichmentView(BaseModel):
     enrichment_type: str
     provider: str

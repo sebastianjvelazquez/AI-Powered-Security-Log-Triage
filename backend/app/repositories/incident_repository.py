@@ -252,13 +252,34 @@ class IncidentRepository:
     def add_llm_enrichment(
         self, db: Session, *, incident: Incident, analysis: LLMAnalysisOutput, provider: str = "ollama"
     ) -> IncidentEnrichment:
-        enrichment = IncidentEnrichment(
-            incident_id=incident.id,
+        return self.add_incident_enrichment(
+            db,
+            incident=incident,
             enrichment_type="llm_analysis",
             provider=provider,
             status="ready",
             summary=analysis.analysis_summary,
             payload=analysis.model_dump(mode="json"),
+        )
+
+    def add_incident_enrichment(
+        self,
+        db: Session,
+        *,
+        incident: Incident,
+        enrichment_type: str,
+        provider: str,
+        status: str,
+        summary: str | None,
+        payload: dict[str, object],
+    ) -> IncidentEnrichment:
+        enrichment = IncidentEnrichment(
+            incident_id=incident.id,
+            enrichment_type=enrichment_type,
+            provider=provider,
+            status=status,
+            summary=summary,
+            payload=payload,
         )
         db.add(enrichment)
         db.flush()
@@ -290,11 +311,36 @@ class IncidentRepository:
         db.flush()
         return log
 
-    def upsert_ioc(self, db: Session, *, indicator: str, is_malicious: bool, reputation_score: float) -> IOCache:
+    def get_ioc(
+        self,
+        db: Session,
+        *,
+        indicator: str,
+        source: str,
+        indicator_type: str = IndicatorType.IP.value,
+    ) -> IOCache | None:
         stmt = select(IOCache).where(
             IOCache.indicator == indicator,
-            IOCache.indicator_type == IndicatorType.IP.value,
-            IOCache.source == "local_detection_seed",
+            IOCache.indicator_type == indicator_type,
+            IOCache.source == source,
+        )
+        return db.scalar(stmt)
+
+    def upsert_ioc(
+        self,
+        db: Session,
+        *,
+        indicator: str,
+        is_malicious: bool,
+        reputation_score: float,
+        source: str = "local_detection_seed",
+        indicator_type: str = IndicatorType.IP.value,
+        attributes: dict[str, object] | None = None,
+    ) -> IOCache:
+        stmt = select(IOCache).where(
+            IOCache.indicator == indicator,
+            IOCache.indicator_type == indicator_type,
+            IOCache.source == source,
         )
         existing = db.scalar(stmt)
         now = datetime.utcnow()
@@ -302,17 +348,21 @@ class IncidentRepository:
             existing.is_malicious = existing.is_malicious or is_malicious
             existing.reputation_score = reputation_score
             existing.last_seen_at = now
+            if attributes:
+                merged_attributes = dict(existing.attributes or {})
+                merged_attributes.update(attributes)
+                existing.attributes = merged_attributes
             return existing
 
         cache_entry = IOCache(
             indicator=indicator,
-            indicator_type=IndicatorType.IP.value,
-            source="local_detection_seed",
+            indicator_type=indicator_type,
+            source=source,
             reputation_score=reputation_score,
             is_malicious=is_malicious,
             first_seen_at=now,
             last_seen_at=now,
-            attributes={"seeded_by": "phase1_detection_pipeline"},
+            attributes=attributes or {"seeded_by": "phase1_detection_pipeline"},
         )
         db.add(cache_entry)
         db.flush()

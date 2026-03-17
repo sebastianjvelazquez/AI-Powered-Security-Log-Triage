@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.correlation.engine import correlate_incident, correlation_lookback_start
 from app.core.config import get_settings
+from app.enrichments.service import ThreatIntelEnrichmentService
 from app.llm.ollama_client import ResilientLLMAnalyzer
 from app.models.db_models import Upload
 from app.models.schemas import (
@@ -55,9 +56,11 @@ class ProcessingPipelineService:
         self,
         llm_analyzer: ResilientLLMAnalyzer | None = None,
         repository: IncidentRepository | None = None,
+        threat_intel_service: ThreatIntelEnrichmentService | None = None,
     ) -> None:
         self.llm_analyzer = llm_analyzer or ResilientLLMAnalyzer()
         self.repository = repository or IncidentRepository()
+        self.threat_intel_service = threat_intel_service or ThreatIntelEnrichmentService(repository=self.repository)
 
     def process_new_upload(
         self,
@@ -134,6 +137,11 @@ class ProcessingPipelineService:
         )
 
         notify("enriching")
+        threat_intel_payload = self.threat_intel_service.enrich_suspicious_events(
+            db,
+            suspicious_events=suspicious_events,
+        )
+        threat_intel_hits = threat_intel_payload.summary.malicious_indicator_count
         if suspicious_events:
             bundle = IncidentBundle(
                 source_type=source_type,
@@ -147,7 +155,7 @@ class ProcessingPipelineService:
                 asset_criticality=settings.asset_criticality,
                 suspicious_event_count=len(suspicious_events),
                 detection_summary=detection_summary,
-                threat_intel_hits=0,
+                threat_intel_hits=threat_intel_hits,
                 correlation_strength=0,
             )
             risk_score = initial_score.total_score
@@ -231,6 +239,15 @@ class ProcessingPipelineService:
             detection_records=detection_records,
             detection_candidates=detection_candidates,
         )
+        self.repository.add_incident_enrichment(
+            db,
+            incident=incident,
+            enrichment_type="threat_intel",
+            provider=threat_intel_payload.provider,
+            status="ready",
+            summary=self.threat_intel_service.build_summary_text(threat_intel_payload),
+            payload=threat_intel_payload.model_dump(mode="json"),
+        )
         self.repository.add_llm_enrichment(db, incident=incident, analysis=llm_analysis_for_response)
 
         notify("scoring")
@@ -241,7 +258,7 @@ class ProcessingPipelineService:
             asset_criticality=settings.asset_criticality,
             suspicious_event_count=len(suspicious_events),
             detection_summary=detection_summary,
-            threat_intel_hits=0,
+            threat_intel_hits=threat_intel_hits,
             correlation_strength=correlation_strength,
         )
         incident.severity = score_view.severity
