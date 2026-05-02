@@ -57,6 +57,7 @@ class HostedProvider(LLMProvider):
     def __init__(self) -> None:
         self.base_url = settings.hosted_llm_base_url.rstrip("/")
         self.endpoint = settings.hosted_llm_endpoint
+        self.api_style = settings.hosted_llm_api_style.strip().lower()
         self.model_name = settings.hosted_llm_model
         self.timeout = settings.hosted_llm_timeout_seconds
         self.api_key = settings.hosted_llm_api_key
@@ -75,16 +76,7 @@ class HostedProvider(LLMProvider):
         return headers
 
     def complete_task(self, *, task_name: str, prompt: str, safe_bundle: dict[str, Any]) -> str:
-        payload = {
-            "model": self.model_name,
-            "task": task_name,
-            "prompt": prompt,
-            "response_format": "json",
-            "metadata": {
-                "safe_bundle": safe_bundle,
-                "provider_mode": "hosted",
-            },
-        }
+        payload = self._build_payload(task_name=task_name, prompt=prompt, safe_bundle=safe_bundle)
 
         try:
             response = requests.post(
@@ -97,7 +89,52 @@ class HostedProvider(LLMProvider):
         except requests.RequestException as exc:
             raise LLMProviderError(f"Hosted provider request failed for task '{task_name}': {exc}") from exc
 
-        body = response.json()
+        return self._extract_response_text(response.json(), task_name=task_name)
+
+    def _build_payload(self, *, task_name: str, prompt: str, safe_bundle: dict[str, Any]) -> dict[str, Any]:
+        if self.api_style == "openai_chat":
+            return {
+                "model": self.model_name,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a SOC enrichment assistant. Return only strict JSON matching the requested schema. "
+                            "Do not infer from raw logs; use only the sanitized incident bundle in the prompt."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0,
+                "response_format": {"type": "json_object"},
+                "metadata": {
+                    "task": task_name,
+                    "safe_bundle_event_count": len(safe_bundle.get("suspicious_events", [])),
+                },
+            }
+
+        payload = {
+            "model": self.model_name,
+            "task": task_name,
+            "prompt": prompt,
+            "response_format": "json",
+            "metadata": {
+                "safe_bundle": safe_bundle,
+                "provider_mode": "hosted",
+            },
+        }
+        return payload
+
+    def _extract_response_text(self, body: dict[str, Any], *, task_name: str) -> str:
+        if self.api_style == "openai_chat":
+            try:
+                raw_output = body["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError) as exc:
+                raise LLMProviderError(
+                    f"Hosted chat response for task '{task_name}' did not contain choices[0].message.content."
+                ) from exc
+            return str(raw_output)
+
         raw_output = body.get(self.response_field)
         if raw_output is None:
             raise LLMProviderError(

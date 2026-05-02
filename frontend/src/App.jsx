@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  getAiStatus,
   getIncidentDetailById,
   getIncidentHistory,
   getJobStatus,
@@ -9,6 +10,7 @@ import {
   updateIncidentStatus,
   uploadLogFile
 } from "./api";
+import AiModeBadge from "./components/AiModeBadge";
 import AnalystReviewPanel from "./components/AnalystReviewPanel";
 import EnrichmentPanel from "./components/EnrichmentPanel";
 import EvaluationDashboard from "./components/EvaluationDashboard";
@@ -36,6 +38,7 @@ export default function App() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [jobStatus, setJobStatus] = useState(null);
   const [scenarios, setScenarios] = useState([]);
+  const [aiStatus, setAiStatus] = useState(null);
   const [replayRun, setReplayRun] = useState(null);
   const [replayingScenarioId, setReplayingScenarioId] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -116,9 +119,19 @@ export default function App() {
     }
   }
 
+  async function loadAiStatus() {
+    try {
+      const status = await getAiStatus();
+      setAiStatus(status);
+    } catch {
+      setAiStatus(null);
+    }
+  }
+
   useEffect(() => {
     loadHistory();
     loadScenarios();
+    loadAiStatus();
     return () => {
       if (pollTimeoutRef.current) {
         window.clearTimeout(pollTimeoutRef.current);
@@ -293,6 +306,7 @@ export default function App() {
           </p>
         </div>
         <div className="hero-metrics">
+          <AiModeBadge status={aiStatus} />
           <div>
             <span className="label">Queued Incidents</span>
             <strong>{history.length}</strong>

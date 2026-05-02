@@ -313,6 +313,18 @@ class AuthenticatedUserResponse(BaseModel):
     role: str
 
 
+class AIProviderStatusResponse(BaseModel):
+    provider: str
+    mode_label: str
+    model: str
+    prompt_version: str
+    configured: bool
+    deterministic_fallback_available: bool
+    raw_logs_sent_to_provider: bool
+    hosted_api_style: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
 class IncidentHistoryItem(BaseModel):
     incident_id: int
     upload_id: int | None = None

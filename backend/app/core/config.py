@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1:8b"
     ollama_timeout_seconds: int = 60
     hosted_llm_base_url: str = ""
-    hosted_llm_endpoint: str = "/v1/triage"
+    hosted_llm_endpoint: str = "/v1/chat/completions"
+    hosted_llm_api_style: str = "openai_chat"
     hosted_llm_model: str = "hosted-triage-model"
     hosted_llm_api_key: str = ""
     hosted_llm_api_key_header: str = "Authorization"

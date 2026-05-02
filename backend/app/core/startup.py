@@ -40,5 +40,7 @@ def validate_startup_configuration(settings: Settings) -> None:
             raise RuntimeError("HOSTED_LLM_BASE_URL is required when LLM_PROVIDER=hosted.")
         if not settings.hosted_llm_endpoint.strip():
             raise RuntimeError("HOSTED_LLM_ENDPOINT is required when LLM_PROVIDER=hosted.")
+        if settings.hosted_llm_api_style.strip().lower() not in {"openai_chat", "generic_json"}:
+            raise RuntimeError("HOSTED_LLM_API_STYLE must be one of: openai_chat, generic_json.")
         if not settings.hosted_llm_response_field.strip():
             raise RuntimeError("HOSTED_LLM_RESPONSE_FIELD is required when LLM_PROVIDER=hosted.")

@@ -40,6 +40,10 @@ export async function getScenarios() {
   return requestJson(`${API_BASE}/scenarios`);
 }
 
+export async function getAiStatus() {
+  return requestJson(`${API_BASE}/system/ai-status`);
+}
+
 export async function replayScenario(scenarioId) {
   return requestJson(`${API_BASE}/scenarios/${scenarioId}/replay`, {
     method: "POST"

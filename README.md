@@ -124,6 +124,8 @@ Expected model JSON:
 Invalid JSON or schema mismatches are rejected. The system falls back to deterministic analysis when needed, and can also run in deterministic-only mode by configuration.
 
 ## AI enrichment modes
+- Recommended default for normal development on constrained hardware:
+  `LLM_PROVIDER=deterministic`
 - `LLM_PROVIDER=ollama`
   - local-first mode for workstation or lab deployments using Ollama
 - `LLM_PROVIDER=hosted`
@@ -168,6 +170,7 @@ Invalid JSON or schema mismatches are rejected. The system falls back to determi
 Example local verification:
 ```bash
 curl -H "Authorization: Bearer admin-dev-token-change-me" http://localhost:8000/metrics
+curl -H "Authorization: Bearer analyst-dev-token-change-me" http://localhost:8000/api/v1/system/ai-status
 ```
 
 ## Local setup
@@ -210,21 +213,27 @@ ollama pull llama3.1:8b
 4. Start Ollama service and keep default `OLLAMA_BASE_URL=http://localhost:11434`.
 
 ### Hosted mode
+Use this when you cannot run Ollama locally but still want AI-generated enrichment during a demo. The hosted provider supports OpenAI-compatible chat-completions style responses by default.
+
 Set:
 ```env
 LLM_PROVIDER="hosted"
 HOSTED_LLM_BASE_URL="https://your-provider.example"
-HOSTED_LLM_ENDPOINT="/v1/triage"
+HOSTED_LLM_ENDPOINT="/v1/chat/completions"
+HOSTED_LLM_API_STYLE="openai_chat"
 HOSTED_LLM_MODEL="your-model"
 HOSTED_LLM_API_KEY="your-api-key"
-HOSTED_LLM_RESPONSE_FIELD="response"
 ```
+
+For a custom JSON provider, set `HOSTED_LLM_API_STYLE="generic_json"` and configure `HOSTED_LLM_RESPONSE_FIELD`.
 
 ### Deterministic-only mode
 Set:
 ```env
 LLM_PROVIDER="deterministic"
 ```
+
+This mode still parses, detects, correlates, enriches with local threat-intel logic, scores incidents, generates reports, and supports analyst workflow. It skips external AI execution and uses deterministic fallback text for the LLM enrichment fields.
 
 Prompt templates live in:
 - `/Users/sjv/Developer/AI-Powered-Security-Log-Triage/backend/app/llm/prompts/attack_classification.md`

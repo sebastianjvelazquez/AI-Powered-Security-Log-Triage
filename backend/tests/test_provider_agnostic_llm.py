@@ -1,7 +1,7 @@
 from app.core.config import get_settings
 from app.llm.analyzer import ResilientLLMAnalyzer, sanitize_bundle_for_prompt
 from app.llm.factory import build_llm_provider
-from app.llm.providers import LLMProviderError, MockProvider
+from app.llm.providers import HostedProvider, LLMProviderError, MockProvider
 from app.models.schemas import IncidentBundle, SuspiciousEventOut
 
 
@@ -81,3 +81,41 @@ def test_mock_provider_returns_valid_analysis_without_fallback() -> None:
     assert result.trace.provider == "mock"
     assert result.trace.used_fallback is False
     assert result.analysis.attack_type == "Credential Access Attempt"
+
+
+def test_hosted_provider_extracts_openai_chat_response(monkeypatch) -> None:  # noqa: ANN001
+    settings = get_settings()
+    monkeypatch.setattr(settings, "hosted_llm_base_url", "https://provider.example")
+    monkeypatch.setattr(settings, "hosted_llm_endpoint", "/v1/chat/completions")
+    monkeypatch.setattr(settings, "hosted_llm_api_style", "openai_chat")
+    provider = HostedProvider()
+
+    raw = provider._extract_response_text(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": "{\"attack_type\":\"Credential Access Attempt\",\"confidence_score\":82}"
+                    }
+                }
+            ]
+        },
+        task_name="attack_classification",
+    )
+
+    assert raw == "{\"attack_type\":\"Credential Access Attempt\",\"confidence_score\":82}"
+
+
+def test_hosted_provider_extracts_generic_json_field(monkeypatch) -> None:  # noqa: ANN001
+    settings = get_settings()
+    monkeypatch.setattr(settings, "hosted_llm_base_url", "https://provider.example")
+    monkeypatch.setattr(settings, "hosted_llm_api_style", "generic_json")
+    monkeypatch.setattr(settings, "hosted_llm_response_field", "output")
+    provider = HostedProvider()
+
+    raw = provider._extract_response_text(
+        {"output": {"mitre_techniques": ["T1110"]}},
+        task_name="mitre_mapping",
+    )
+
+    assert raw == "{\"mitre_techniques\": [\"T1110\"]}"
