@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import {
   getAiStatus,
   getIncidentDetailById,
@@ -19,8 +20,8 @@ import IncidentDetailPanel from "./components/IncidentDetailPanel";
 import IncidentQueue from "./components/IncidentQueue";
 import JobStatusBanner from "./components/JobStatusBanner";
 import RelatedIncidentsPanel from "./components/RelatedIncidentsPanel";
+import Sidebar from "./components/Sidebar";
 import UploadPanel from "./components/UploadPanel";
-import WorkspaceTabs from "./components/WorkspaceTabs";
 
 const DEFAULT_FILTERS = {
   search: "",
@@ -297,91 +298,114 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">SOC Workspace</p>
-          <h1>AI-Powered Security Log Triage</h1>
-          <p className="hero-copy">
-            Incident-centric analyst workflow for async ingestion, explainable scoring, enrichment, and review.
-          </p>
-        </div>
-        <div className="hero-metrics">
-          <AiModeBadge status={aiStatus} />
-          <div>
-            <span className="label">Queued Incidents</span>
-            <strong>{history.length}</strong>
+      <Sidebar activeView={activeView} onChange={setActiveView} aiStatus={aiStatus} />
+
+      <div className="app-content">
+        <header className="top-bar">
+          <div className="top-bar-breadcrumb">
+            <span>SOC Workspace</span>
+            <span aria-hidden="true">›</span>
+            <span className="current">
+              {activeView === "triage"
+                ? "Incident Queue"
+                : activeView === "upload"
+                  ? "Upload / Replay"
+                  : "Evaluation"}
+            </span>
           </div>
-          <div>
-            <span className="label">Selected</span>
-            <strong>{selectedIncident ? `#${selectedIncident.incident_id}` : "None"}</strong>
-          </div>
-        </div>
-      </header>
 
-      <WorkspaceTabs activeView={activeView} onChange={setActiveView} />
-
-      {error ? <div className="error-box">{error}</div> : null}
-
-      <JobStatusBanner jobStatus={jobStatus} onOpenIncident={openIncident} />
-
-      {activeView === "triage" ? (
-        <div className="workspace-layout">
-          <IncidentQueue
-            items={filteredHistory}
-            filters={filters}
-            mitreOptions={mitreOptions}
-            selectedIncidentId={selectedIncidentId}
-            onFilterChange={setFilter}
-            onSelect={setSelectedIncidentId}
-          />
-
-          <div className="workspace-center">
-            <IncidentDetailPanel incident={selectedIncident} />
-            <AnalystReviewPanel
-              incident={selectedIncident}
-              loading={submittingReview}
-              onSubmitReview={handleReviewSubmit}
-              onStatusUpdate={handleStatusUpdate}
+          <div className="top-bar-search">
+            <Search size={13} className="top-bar-search-icon" aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Search incidents…"
+              value={filters.search}
+              onChange={(event) => setFilter("search", event.target.value)}
+              aria-label="Search incidents"
             />
           </div>
 
-          <div className="workspace-right">
-            {loadingDetail ? (
-              <section className="subpanel">
-                <div className="empty-state compact">
-                  <p>Loading incident detail...</p>
-                </div>
-              </section>
+          <div className="top-bar-end">
+            <div className="top-bar-stat">
+              <span>Incidents:</span>
+              <strong>{history.length}</strong>
+            </div>
+            {selectedIncident ? (
+              <div className="top-bar-stat">
+                <span>Selected:</span>
+                <strong>#{selectedIncident.incident_id}</strong>
+              </div>
             ) : null}
-            <EventTimeline events={selectedIncident?.suspicious_events || []} />
-            <EnrichmentPanel enrichments={selectedIncident?.enrichments || []} />
-            <RelatedIncidentsPanel
-              currentIncident={selectedIncident}
-              history={history}
-              onSelectIncident={setSelectedIncidentId}
-            />
+            <AiModeBadge status={aiStatus} />
           </div>
-        </div>
-      ) : null}
-      {activeView === "upload" ? (
-        <UploadPanel
-          onSubmit={handleUpload}
-          loading={submittingUpload}
-          scenarios={scenarios}
-          onReplay={handleReplay}
-          replayingScenarioId={replayingScenarioId}
-          replayRun={replayRun}
-          onOpenIncident={openIncident}
-        />
-      ) : null}
+        </header>
 
-      {activeView === "evaluation" ? <EvaluationDashboard items={history} /> : null}
+        <main className="app-main">
+          {error ? <div className="error-box" role="alert">{error}</div> : null}
 
-      {!loadingHistory && history.length === 0 ? (
-        <div className="empty-state tall">
-          <p>Queue an upload to start building the incident workspace.</p>
-        </div>
-      ) : null}
+          <JobStatusBanner jobStatus={jobStatus} onOpenIncident={openIncident} />
+
+          {activeView === "triage" ? (
+            <div className="workspace-layout">
+              <IncidentQueue
+                items={filteredHistory}
+                filters={filters}
+                mitreOptions={mitreOptions}
+                selectedIncidentId={selectedIncidentId}
+                onFilterChange={setFilter}
+                onSelect={setSelectedIncidentId}
+              />
+
+              <div className="workspace-center">
+                <IncidentDetailPanel incident={selectedIncident} />
+                <AnalystReviewPanel
+                  incident={selectedIncident}
+                  loading={submittingReview}
+                  onSubmitReview={handleReviewSubmit}
+                  onStatusUpdate={handleStatusUpdate}
+                />
+              </div>
+
+              <div className="workspace-right">
+                {loadingDetail ? (
+                  <section className="subpanel">
+                    <div className="empty-state compact">
+                      <p>Loading incident detail…</p>
+                    </div>
+                  </section>
+                ) : null}
+                <EventTimeline events={selectedIncident?.suspicious_events || []} />
+                <EnrichmentPanel enrichments={selectedIncident?.enrichments || []} />
+                <RelatedIncidentsPanel
+                  currentIncident={selectedIncident}
+                  history={history}
+                  onSelectIncident={setSelectedIncidentId}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {activeView === "upload" ? (
+            <UploadPanel
+              onSubmit={handleUpload}
+              loading={submittingUpload}
+              scenarios={scenarios}
+              onReplay={handleReplay}
+              replayingScenarioId={replayingScenarioId}
+              replayRun={replayRun}
+              onOpenIncident={openIncident}
+            />
+          ) : null}
+
+          {activeView === "evaluation" ? <EvaluationDashboard items={history} /> : null}
+
+          {!loadingHistory && history.length === 0 ? (
+            <div className="empty-state tall">
+              <p>Queue an upload to start building the incident workspace.</p>
+            </div>
+          ) : null}
+        </main>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,52 @@
+function ScoreRing({ score, maxScore, severity }) {
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const pct = maxScore ? Math.min(score / maxScore, 1) : 0;
+  const offset = circumference * (1 - pct);
+
+  const color =
+    pct >= 0.8
+      ? "var(--critical)"
+      : pct >= 0.6
+        ? "var(--high)"
+        : pct >= 0.4
+          ? "var(--medium)"
+          : "var(--accent)";
+
+  return (
+    <div style={{ display: "flex", justifyContent: "center", padding: "10px 0" }}>
+      <svg width="96" height="96" viewBox="0 0 100 100" aria-label={`Risk score: ${score} out of ${maxScore}`}>
+        <circle cx="50" cy="50" r={radius} fill="none" stroke="rgba(148,163,184,0.1)" strokeWidth="8" />
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform="rotate(-90 50 50)"
+          style={{ transition: "stroke-dashoffset 500ms ease" }}
+        />
+        <text
+          x="50"
+          y="46"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{ fill: "var(--text)", fontSize: "18px", fontWeight: 700 }}
+        >
+          {score}
+        </text>
+        <text x="50" y="62" textAnchor="middle" style={{ fill: "var(--muted)", fontSize: "8px" }}>
+          {severity || ""}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 export default function ScoreBreakdownCard({ score }) {
   if (!score) {
     return (
@@ -22,11 +71,9 @@ export default function ScoreBreakdownCard({ score }) {
           <p className="eyebrow">Scoring</p>
           <h3>Risk Breakdown</h3>
         </div>
-        <div className="score-total">
-          <strong>{score.total_score}</strong>
-          <span>{score.severity}</span>
-        </div>
       </div>
+
+      <ScoreRing score={score.total_score} maxScore={100} severity={score.severity} />
 
       <div className="score-summary-grid">
         <div>
@@ -34,7 +81,7 @@ export default function ScoreBreakdownCard({ score }) {
           <strong>{score.summary.suspicious_event_count}</strong>
         </div>
         <div>
-          <span className="label">Threat Intel Hits</span>
+          <span className="label">Intel Hits</span>
           <strong>{score.summary.threat_intel_hits}</strong>
         </div>
         <div>
@@ -55,7 +102,7 @@ export default function ScoreBreakdownCard({ score }) {
                 </strong>
               </div>
               <div className="score-bar">
-                <span style={{ width }} />
+                <span style={{ width }} aria-hidden="true" />
               </div>
               <p>{component.rationale}</p>
             </div>

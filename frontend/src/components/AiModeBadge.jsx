@@ -1,17 +1,17 @@
 export default function AiModeBadge({ status }) {
   const provider = status?.provider || "unknown";
-  const label = status?.mode_label || "AI status unavailable";
+  const label = status?.mode_label || "Unavailable";
   const configured = status?.configured ?? false;
-  const className = `ai-mode-badge ai-mode-${provider} ${configured ? "is-configured" : "is-unconfigured"}`;
+
+  const dotClass = `ai-badge-dot${!configured ? " unconfigured" : provider === "hosted" ? " hosted" : provider === "deterministic" ? " deterministic" : ""}`;
 
   return (
-    <div className={className} title={status?.notes?.join(" ") || "AI enrichment status"}>
-      <span className="ai-mode-dot" aria-hidden="true" />
-      <div>
-        <span className="label">AI Mode</span>
-        <strong>{label}</strong>
-        <small>{status?.model || "No provider configured"}</small>
-      </div>
+    <div
+      className="ai-badge-compact"
+      title={[status?.model, ...(status?.notes || [])].filter(Boolean).join(" · ") || "AI enrichment status"}
+    >
+      <span className={dotClass} aria-hidden="true" />
+      <span>{label}</span>
     </div>
   );
 }

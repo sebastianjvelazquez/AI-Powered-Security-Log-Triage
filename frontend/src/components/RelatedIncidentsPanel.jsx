@@ -1,3 +1,5 @@
+import SeverityBadge from "./SeverityBadge";
+
 export default function RelatedIncidentsPanel({ currentIncident, history, onSelectIncident }) {
   if (!currentIncident) {
     return (
@@ -32,6 +34,7 @@ export default function RelatedIncidentsPanel({ currentIncident, history, onSele
           <p className="eyebrow">Related</p>
           <h3>Incident Neighbors</h3>
         </div>
+        {related.length > 0 ? <span className="count-pill">{related.length}</span> : null}
       </div>
 
       {related.length === 0 ? (
@@ -40,15 +43,35 @@ export default function RelatedIncidentsPanel({ currentIncident, history, onSele
         </div>
       ) : (
         <div className="mini-list">
-          {related.map((item) => (
-            <button key={item.incident_id} type="button" className="mini-card interactive" onClick={() => onSelectIncident(item.incident_id)}>
-              <strong>{item.title}</strong>
-              <p>
-                #{item.incident_id} · {item.source_type} · {item.status.replace("_", " ")}
-              </p>
-              <p>Risk {item.risk_score ?? "-"}</p>
-            </button>
-          ))}
+          {related.map((item) => {
+            const sharedTech = item.mitre_techniques.filter((t) => currentMitre.has(t));
+            return (
+              <button
+                key={item.incident_id}
+                type="button"
+                className="mini-card interactive"
+                onClick={() => onSelectIncident(item.incident_id)}
+              >
+                <div className="mini-card-row" style={{ marginBottom: 3 }}>
+                  <SeverityBadge severity={item.severity || "Low"} variant="dot" />
+                  <strong style={{ flex: 1 }}>{item.title}</strong>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--muted)" }}>
+                    {item.risk_score ?? "-"}
+                  </span>
+                </div>
+                <p style={{ paddingLeft: 14 }}>
+                  #{item.incident_id} · {item.source_type} · {item.status.replace(/_/g, " ")}
+                </p>
+                {sharedTech.length > 0 ? (
+                  <div style={{ paddingLeft: 14 }}>
+                    <span className="count-pill">
+                      {sharedTech.length} shared technique{sharedTech.length > 1 ? "s" : ""}
+                    </span>
+                  </div>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       )}
     </section>

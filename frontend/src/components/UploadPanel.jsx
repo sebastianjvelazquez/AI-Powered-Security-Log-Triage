@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { Play, Upload } from "lucide-react";
 
 const SOURCE_TYPES = ["auth", "firewall", "windows", "cloud"];
 
@@ -20,6 +21,16 @@ export default function UploadPanel({
 }) {
   const [sourceType, setSourceType] = useState("auth");
   const [file, setFile] = useState(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleDrop = useCallback((event) => {
+    event.preventDefault();
+    setDragging(false);
+    const dropped = event.dataTransfer.files?.[0];
+    if (dropped) {
+      setFile(dropped);
+    }
+  }, []);
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -43,50 +54,98 @@ export default function UploadPanel({
 
       <div className="upload-grid">
         <form className="subpanel upload-panel" onSubmit={handleSubmit}>
-          <h3>Upload Security Log</h3>
-          <p className="muted-copy">Queue an async analysis job and follow it through parsing, enrichment, and scoring.</p>
+          <h3 style={{ margin: "0 0 5px", fontSize: "0.875rem", fontWeight: 600 }}>Upload Security Log</h3>
+          <p className="muted-copy">
+            Queue an async analysis job through parsing, enrichment, and scoring.
+          </p>
 
-          <label>
-            Source Type
-            <select value={sourceType} onChange={(event) => setSourceType(event.target.value)}>
+          <div
+            className={`dropzone${dragging ? " dragging" : ""}`}
+            role="button"
+            tabIndex={0}
+            aria-label="Drop zone for log files"
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById("log-file-input").click()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                document.getElementById("log-file-input").click();
+              }
+            }}
+          >
+            <div className="dropzone-icon">
+              <Upload size={26} aria-hidden="true" />
+            </div>
+            {file ? (
+              <>
+                <p className="file-name">{file.name}</p>
+                <p>{(file.size / 1024).toFixed(1)} KB</p>
+              </>
+            ) : (
+              <>
+                <p>Drop log file here or click to browse</p>
+                <p>.log · .txt · .json · .csv</p>
+              </>
+            )}
+          </div>
+          <input
+            id="log-file-input"
+            type="file"
+            accept=".log,.txt,.json,.csv"
+            style={{ display: "none" }}
+            onChange={(event) => setFile(event.target.files?.[0] || null)}
+          />
+
+          <div style={{ marginBottom: 12 }}>
+            <p className="label" style={{ marginBottom: 5 }}>Source Type</p>
+            <div className="segmented-control" role="group" aria-label="Source type">
               {SOURCE_TYPES.map((type) => (
-                <option key={type} value={type}>
+                <button
+                  key={type}
+                  type="button"
+                  className={type === sourceType ? "active" : ""}
+                  onClick={() => setSourceType(type)}
+                  aria-pressed={type === sourceType}
+                >
                   {type}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
-
-          <label>
-            Log File
-            <input
-              type="file"
-              accept=".log,.txt,.json,.csv"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
-            />
-          </label>
+            </div>
+          </div>
 
           <button type="submit" className="primary-button" disabled={loading || !file}>
-            {loading ? "Submitting..." : "Queue Triage Job"}
+            {loading ? (
+              "Submitting…"
+            ) : (
+              <>
+                <Upload size={12} aria-hidden="true" /> Queue Triage Job
+              </>
+            )}
           </button>
         </form>
 
         <section className="subpanel replay-panel">
-          <h3>Scenario Replay</h3>
+          <h3 style={{ margin: "0 0 5px", fontSize: "0.875rem", fontWeight: 600 }}>Scenario Replay</h3>
           <p className="muted-copy">
             Replay prebuilt attack packs through the same async ingestion path used for uploaded logs.
           </p>
 
           {replayRun ? (
             <div className="replay-run-card">
-              <div className="panel-heading">
+              <div
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}
+              >
                 <div>
                   <p className="eyebrow">Active Replay</p>
-                  <h4>{replayRun.name}</h4>
+                  <strong style={{ fontSize: "0.82rem" }}>{replayRun.name}</strong>
                 </div>
                 <span className="count-pill">{replayRun.jobs.length} jobs</span>
               </div>
-              <div className="chip-row">
+              <div className="chip-row" style={{ marginBottom: 8 }}>
                 {Object.entries(counts).map(([status, count]) => (
                   <span key={status} className={`status-chip status-${status}`}>
                     {status}: {count}
@@ -100,10 +159,17 @@ export default function UploadPanel({
                     <p>
                       {job.source_type} · {job.status} · {job.current_stage}
                     </p>
-                    {job.error_message ? <p>{job.error_message}</p> : null}
+                    {job.error_message ? (
+                      <p style={{ color: "var(--critical)" }}>{job.error_message}</p>
+                    ) : null}
                     {job.incident_id ? (
-                      <button type="button" className="ghost-button" onClick={() => onOpenIncident(job.incident_id)}>
-                        Open Incident #{job.incident_id}
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        style={{ marginTop: 6 }}
+                        onClick={() => onOpenIncident(job.incident_id)}
+                      >
+                        Open #{job.incident_id}
                       </button>
                     ) : null}
                   </div>
@@ -113,6 +179,7 @@ export default function UploadPanel({
                 <button
                   type="button"
                   className="primary-button"
+                  style={{ marginTop: 10 }}
                   onClick={() => onOpenIncident(openableJobs[0].incident_id)}
                 >
                   Open First Completed Incident
@@ -123,9 +190,12 @@ export default function UploadPanel({
 
           <div className="scenario-list">
             {scenarios.map((scenario) => (
-              <div key={scenario.scenario_id} className="mini-card scenario-card">
-                <strong>{scenario.name}</strong>
-                <p>{scenario.description}</p>
+              <div key={scenario.scenario_id} className="scenario-card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <strong style={{ fontSize: "0.82rem" }}>{scenario.name}</strong>
+                  <span className="count-pill">{scenario.upload_count} files</span>
+                </div>
+                <p className="muted-copy">{scenario.description}</p>
                 <div className="chip-row">
                   {scenario.tags.map((tag) => (
                     <span key={tag} className="mitre-chip">
@@ -133,21 +203,22 @@ export default function UploadPanel({
                     </span>
                   ))}
                 </div>
-                <p>
-                  Uploads: {scenario.upload_count} · Sources: {scenario.source_types.join(", ")}
-                </p>
-                <p>
-                  Expected: {scenario.expected_outcome.expected_min_severity} · Rules{" "}
-                  {scenario.expected_outcome.expected_rule_hits.join(", ") || "none"}
-                </p>
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={Boolean(replayingScenarioId)}
-                  onClick={() => onReplay(scenario.scenario_id)}
+                <div
+                  style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}
                 >
-                  {replayingScenarioId === scenario.scenario_id ? "Launching..." : "Replay Scenario"}
-                </button>
+                  <span style={{ fontSize: "0.68rem", color: "var(--muted)" }}>
+                    Expected: {scenario.expected_outcome.expected_min_severity}
+                  </span>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={Boolean(replayingScenarioId)}
+                    onClick={() => onReplay(scenario.scenario_id)}
+                  >
+                    <Play size={11} aria-hidden="true" />
+                    {replayingScenarioId === scenario.scenario_id ? "Launching…" : "Replay"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

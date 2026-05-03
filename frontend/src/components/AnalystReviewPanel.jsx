@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Loader } from "lucide-react";
 
 const DISPOSITIONS = ["true_positive", "false_positive", "benign", "needs_review", "escalated"];
 const STATUSES = ["new", "in_review", "escalated", "closed", "false_positive"];
@@ -19,8 +20,7 @@ export default function AnalystReviewPanel({ incident, loading, onSubmitReview, 
   const [notes, setNotes] = useState("");
   const [mitreText, setMitreText] = useState("");
   const [actionsText, setActionsText] = useState("");
-
-  const quickStatuses = useMemo(() => ["in_review", "escalated", "closed", "false_positive"], []);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   if (!incident) {
     return (
@@ -61,17 +61,38 @@ export default function AnalystReviewPanel({ incident, loading, onSubmitReview, 
       </div>
 
       <div className="quick-actions">
-        {quickStatuses.map((status) => (
-          <button
-            key={status}
-            type="button"
-            className="ghost-button"
-            disabled={loading}
-            onClick={() => onStatusUpdate({ reviewer, status, notes: `Quick status update to ${status}.` })}
-          >
-            Mark {status.replace("_", " ")}
-          </button>
-        ))}
+        <button
+          type="button"
+          className="ghost-button btn-escalate"
+          disabled={loading}
+          onClick={() => onStatusUpdate({ reviewer, status: "escalated", notes: "Quick escalation." })}
+        >
+          Escalate
+        </button>
+        <button
+          type="button"
+          className="ghost-button btn-close"
+          disabled={loading}
+          onClick={() => onStatusUpdate({ reviewer, status: "closed", notes: "Closed by analyst." })}
+        >
+          Close
+        </button>
+        <button
+          type="button"
+          className="ghost-button btn-fp"
+          disabled={loading}
+          onClick={() => onStatusUpdate({ reviewer, status: "false_positive", notes: "Marked as false positive." })}
+        >
+          False Positive
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={loading}
+          onClick={() => onStatusUpdate({ reviewer, status: "in_review", notes: "Taken into review." })}
+        >
+          In Review
+        </button>
       </div>
 
       <form className="review-form" onSubmit={handleSubmit}>
@@ -84,58 +105,81 @@ export default function AnalystReviewPanel({ incident, loading, onSubmitReview, 
           <select value={disposition} onChange={(event) => setDisposition(event.target.value)}>
             {DISPOSITIONS.map((option) => (
               <option key={option} value={option}>
-                {option.replace("_", " ")}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Target Status
-          <select value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)}>
-            <option value="">Auto from disposition</option>
-            {STATUSES.map((option) => (
-              <option key={option} value={option}>
-                {option.replace("_", " ")}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Override Severity
-          <select value={overrideSeverity} onChange={(event) => setOverrideSeverity(event.target.value)}>
-            <option value="">No override</option>
-            {SEVERITIES.map((option) => (
-              <option key={option} value={option}>
-                {option}
+                {option.replace(/_/g, " ")}
               </option>
             ))}
           </select>
         </label>
         <label className="form-span">
           Notes
-          <textarea rows="4" value={notes} onChange={(event) => setNotes(event.target.value)} />
-        </label>
-        <label className="form-span">
-          Override MITRE Techniques
-          <textarea
-            rows="3"
-            placeholder={"One MITRE technique per line\nT1110"}
-            value={mitreText}
-            onChange={(event) => setMitreText(event.target.value)}
-          />
-        </label>
-        <label className="form-span">
-          Override Recommended Actions
-          <textarea
-            rows="4"
-            placeholder={"One action per line\nDisable the targeted account."}
-            value={actionsText}
-            onChange={(event) => setActionsText(event.target.value)}
-          />
+          <textarea rows="3" value={notes} onChange={(event) => setNotes(event.target.value)} />
         </label>
 
+        <div className="form-span">
+          <button
+            type="button"
+            className="collapsible-toggle"
+            onClick={() => setShowAdvanced((prev) => !prev)}
+            aria-expanded={showAdvanced}
+          >
+            {showAdvanced ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
+            Advanced Overrides
+          </button>
+          {showAdvanced ? (
+            <div className="review-form" style={{ marginTop: 9 }}>
+              <label>
+                Target Status
+                <select value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)}>
+                  <option value="">Auto from disposition</option>
+                  {STATUSES.map((option) => (
+                    <option key={option} value={option}>
+                      {option.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Override Severity
+                <select value={overrideSeverity} onChange={(event) => setOverrideSeverity(event.target.value)}>
+                  <option value="">No override</option>
+                  {SEVERITIES.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-span">
+                Override MITRE Techniques
+                <textarea
+                  rows="3"
+                  placeholder={"One MITRE technique per line\nT1110"}
+                  value={mitreText}
+                  onChange={(event) => setMitreText(event.target.value)}
+                />
+              </label>
+              <label className="form-span">
+                Override Recommended Actions
+                <textarea
+                  rows="3"
+                  placeholder="One action per line"
+                  value={actionsText}
+                  onChange={(event) => setActionsText(event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
+        </div>
+
         <button type="submit" className="primary-button" disabled={loading}>
-          {loading ? "Saving..." : "Submit Review"}
+          {loading ? (
+            <>
+              <Loader size={12} style={{ animation: "spin 1s linear infinite" }} aria-hidden="true" />
+              Saving…
+            </>
+          ) : (
+            "Submit Review"
+          )}
         </button>
       </form>
     </section>

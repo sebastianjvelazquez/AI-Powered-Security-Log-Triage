@@ -1,3 +1,5 @@
+import { AlertTriangle, CheckCircle, Shield, XCircle } from "lucide-react";
+
 function averageRisk(items) {
   if (items.length === 0) {
     return 0;
@@ -33,18 +35,30 @@ export default function EvaluationDashboard({ items }) {
     <section className="evaluation-view">
       <div className="metric-card-grid">
         <article className="metric-card">
+          <div className="metric-card-icon">
+            <Shield size={18} aria-hidden="true" />
+          </div>
           <span className="label">Incidents</span>
           <strong>{items.length}</strong>
         </article>
         <article className="metric-card">
+          <div className="metric-card-icon" style={{ color: "var(--medium)" }}>
+            <AlertTriangle size={18} aria-hidden="true" />
+          </div>
           <span className="label">Average Risk</span>
           <strong>{averageRisk(items)}</strong>
         </article>
         <article className="metric-card">
+          <div className="metric-card-icon" style={{ color: "var(--critical)" }}>
+            <XCircle size={18} aria-hidden="true" />
+          </div>
           <span className="label">Escalated</span>
           <strong>{statusCounts.escalated || 0}</strong>
         </article>
         <article className="metric-card">
+          <div className="metric-card-icon" style={{ color: "var(--low)" }}>
+            <CheckCircle size={18} aria-hidden="true" />
+          </div>
           <span className="label">False Positive</span>
           <strong>{statusCounts.false_positive || 0}</strong>
         </article>
@@ -71,7 +85,7 @@ export default function EvaluationDashboard({ items }) {
         <section className="workspace-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">ATT&CK Coverage</p>
+              <p className="eyebrow">ATT&amp;CK Coverage</p>
               <h2>Most Frequent Techniques</h2>
             </div>
           </div>
@@ -99,17 +113,28 @@ export default function EvaluationDashboard({ items }) {
               <h2>Local Evaluation Path</h2>
             </div>
           </div>
-          <div className="mini-card">
-            <strong>Dataset</strong>
-            <p><code>backend/evaluation/datasets/default/benchmark_manifest.json</code></p>
-          </div>
-          <div className="mini-card">
-            <strong>Command</strong>
-            <p><code>python3 backend/scripts/run_benchmark.py --dataset backend/evaluation/datasets/default/benchmark_manifest.json</code></p>
-          </div>
-          <div className="mini-card">
-            <strong>Reports</strong>
-            <p><code>backend/evaluation/reports/</code> will receive JSON and Markdown summaries.</p>
+          <div className="mini-list">
+            <div className="mini-card">
+              <strong>Dataset</strong>
+              <p>
+                <code>backend/evaluation/datasets/default/benchmark_manifest.json</code>
+              </p>
+            </div>
+            <div className="mini-card">
+              <strong>Command</strong>
+              <p>
+                <code>
+                  python3 backend/scripts/run_benchmark.py --dataset
+                  backend/evaluation/datasets/default/benchmark_manifest.json
+                </code>
+              </p>
+            </div>
+            <div className="mini-card">
+              <strong>Reports</strong>
+              <p>
+                <code>backend/evaluation/reports/</code> will receive JSON and Markdown summaries.
+              </p>
+            </div>
           </div>
         </section>
       </div>
